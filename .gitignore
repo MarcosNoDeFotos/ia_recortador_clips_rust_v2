@@ -1,0 +1,6 @@
+.venv/
+*.mp4
+*.old
+*.mkv
+*.npy
+*.json
