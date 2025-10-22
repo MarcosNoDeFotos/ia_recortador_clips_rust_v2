@@ -16,8 +16,8 @@ videoPath = None
 SEGMENT_DURATION = 10
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
 OUTPUT_DIR = CURRENT_PATH+"../anotaciones"
-VIDEOS_DIR = CURRENT_PATH + "videos_para_anotar/"
-
+VIDEOS_DIR = CURRENT_PATH + "../videos_para_anotar/"
+DATASET_DIR = CURRENT_PATH + "../dataset/"
 os.makedirs(VIDEOS_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -63,9 +63,10 @@ def get_segments(video_path, segment_duration):
     cap.release()
     return segments
 
-
 def get_most_common_labels(max_labels=15):
     labels = []
+
+    # 1️⃣ Extraer labels de los JSON de anotaciones
     for f in os.listdir(OUTPUT_DIR):
         if f.endswith("_annotations.json"):
             try:
@@ -76,9 +77,27 @@ def get_most_common_labels(max_labels=15):
                             labels.append(a["label"])
             except Exception:
                 pass
+
+    # Contar las labels más comunes
     counter = Counter(labels)
     most_common = [label for label, _ in counter.most_common(max_labels)]
-    return most_common
+
+    # 2️⃣ Añadir nombres de clases que hay en la carpeta dataset/
+    if os.path.exists(DATASET_DIR):
+        for cls in os.listdir(DATASET_DIR):
+            if os.path.isdir(os.path.join(DATASET_DIR, cls)):
+                most_common.append(cls)
+
+    # 3️⃣ Eliminar duplicados manteniendo el orden
+    seen = set()
+    final_labels = []
+    for label in most_common:
+        if label not in seen:
+            final_labels.append(label)
+            seen.add(label)
+
+    return final_labels
+
 
 
 @app.route('/abrir_video', methods=['GET'])
@@ -116,15 +135,19 @@ def abrir_video():
 
 @app.route('/video')
 def video_file():
-    global videoPath
-    if not videoPath:
-        return "No hay vídeo seleccionado", 404
+    video_name = request.args.get("video")
+    if not video_name:
+        return "No hay vídeo indicado", 404
+    video_path = os.path.join(VIDEOS_DIR, video_name)
+    if not os.path.exists(video_path):
+        return "Vídeo no encontrado", 404
 
-    response = make_response(send_file(videoPath))
+    response = make_response(send_file(video_path))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     return response
+
 
 
 @app.route('/get_segments', methods=['POST'])
@@ -161,6 +184,33 @@ def save_annotations():
     return jsonify({"status": "ok", "saved_to": output_file, "tags": updated_tags})
 
 
+@app.route("/eliminar", methods=["POST"])
+def eliminar_anotacion():
+    data = request.get_json()
+    video_file = data.get("video")
+    index = data.get("index")
+
+    annotations_path = os.path.join(OUTPUT_DIR, f"{video_file}_annotations.json")
+    if not os.path.exists(annotations_path):
+        return jsonify({"status": "error", "message": "Archivo no encontrado"})
+
+    try:
+        with open(annotations_path, "r", encoding="utf-8") as f:
+            annotations = json.load(f)
+
+        if 0 <= index < len(annotations):
+            annotations.pop(index)
+            with open(annotations_path, "w", encoding="utf-8") as f:
+                json.dump(annotations, f, indent=2, ensure_ascii=False)
+            return jsonify({"status": "ok"})
+        else:
+            return jsonify({"status": "error", "message": "Índice fuera de rango"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+
+
 @app.route("/listar_videos")
 def listar_videos():
     videos = [f for f in os.listdir(VIDEOS_DIR) if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv"))]
@@ -187,7 +237,7 @@ def abrir_video_modal():
         except:
             pass
     tags = get_most_common_labels()
-    return jsonify({"video_url": f"/anotaciones/video?ts={int(time.time())}", "annotations": annotations, "tags": tags})
+    return jsonify({"video_url": f"/anotaciones/video?video={video_name}&ts={int(time.time())}", "annotations": annotations, "tags": tags})
 
 @app.route("/get_annotation_count")
 def get_annotation_count():

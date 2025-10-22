@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Generar Modelo SVM</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --fg: #e0e0e0;
+            --card: #1e1e1e;
+            --accent: #4caf50;
+        }
+
+        body.light {
+            --bg: #fafafa;
+            --fg: #222;
+            --card: #fff;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: var(--card);
+            border-bottom: 1px solid #333;
+            padding: 8px 0;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+            /* más suave */
+            margin-bottom: 20px;
+            height: 48px;
+            /* igual que los otros index */
+        }
+
+        .header h1 {
+            font-size: 1.1rem;
+            margin: 0;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+
+        .back-button {
+            position: absolute;
+            left: 15px;
+            background: transparent;
+            border: none;
+            color: var(--fg);
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+        }
+
+        .back-button:hover {
+            opacity: 0.7;
+        }
+
+
+        ul {
+            list-style: none;
+            padding: 0;
+            background: var(--card);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        li {
+            padding: 10px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .btn-container {
+            display: flex;
+            justify-content: end;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            bottom: 15px;
+            right: 20px;
+            background: var(--card);
+            border: 1px solid #333;
+            color: var(--fg);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .log-container {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 60px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-bottom: 140px;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-content {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        .progress-bar {
+            background: #333;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-inner {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <button class="back-button" onclick="window.location.href='/'">⬅️</button>
+        <h1>Generar Modelo SVM</h1>
+    </header>
+
+    <ul id="classList"></ul>
+    <div class="btn-container">
+        <button class="btn" onclick="iniciarGeneracion()">Generar Modelo</button>
+    </div>
+
+    <div class="log-container" id="logContainer"><pre>Cargando registros...</pre></div>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
+
+    <div class="modal" id="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Progreso</h3>
+            <p id="modalText">Iniciando...</p>
+            <div class="progress-bar">
+                <div id="progressInner" class="progress-inner"></div>
+            </div>
+            <pre id="resultado"></pre>
+            <button id="closeModal" style="display:none;" class="btn" onclick="cerrarModal()">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById("modal");
+        const modalText = document.getElementById("modalText");
+        const progressInner = document.getElementById("progressInner");
+        const resultado = document.getElementById("resultado");
+        const closeModalBtn = document.getElementById("closeModal");
+
+        async function cargarClases() {
+            const res = await fetch("/generar_modelo/listar_clases");
+            const data = await res.json();
+            const list = document.getElementById("classList");
+            list.innerHTML = "";
+            data.forEach(c => {
+                const li = document.createElement("li");
+                li.textContent = c.clase;
+                const span = document.createElement("span");
+                span.textContent = `${c.videos} vídeos`;
+                li.appendChild(span);
+                list.appendChild(li);
+            });
+        }
+
+        async function cargarLog() {
+            const res = await fetch("/generar_modelo/leer_log");
+            const data = await res.json();
+            const pre = document.querySelector("#logContainer pre");
+            pre.textContent = data.log;
+
+            // 🔹 Scroll automático al final
+            const container = document.getElementById("logContainer");
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function iniciarGeneracion() {
+            modal.style.display = "flex";
+            resultado.textContent = "";
+            closeModalBtn.style.display = "none";
+            await fetch("/generar_modelo/generar_modelo", { method: "POST" });
+            actualizarProgreso();
+        }
+
+        async function actualizarProgreso() {
+            const res = await fetch("/generar_modelo/progreso");
+            const data = await res.json();
+            modalText.textContent = data.message;
+            if (data.total > 0) {
+                const pct = (data.progress / data.total) * 100;
+                progressInner.style.width = pct + "%";
+            }
+            if (data.status === "done" || data.status === "error") {
+                resultado.textContent = data.report || "Proceso finalizado.";
+                closeModalBtn.style.display = "block";
+                cargarLog();
+            } else {
+                setTimeout(actualizarProgreso, 1000);
+            }
+        }
+
+        function cerrarModal() {
+            modal.style.display = "none";
+        }
+
+        // Obtener tema guardado o usar "dark" por defecto
+        let theme = localStorage.getItem("theme") || "dark";
+
+        // Aplicar tema inicial
+        document.body.classList.toggle("light", theme === "light");
+
+        // Función para cambiar tema
+        function toggleTheme() {
+            theme = theme === "dark" ? "light" : "dark";  // Alternar valor
+            localStorage.setItem("theme", theme);
+            document.body.classList.toggle("light", theme === "light");
+        }
+
+        cargarClases();
+        cargarLog();
+    </script>
+</body>
+
+</html>

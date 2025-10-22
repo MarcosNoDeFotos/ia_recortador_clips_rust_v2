@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generar Clases</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --fg: #e0e0e0;
+            --card: #1e1e1e;
+            --accent: #4caf50;
+            --border-color: #333;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+        }
+
+        body.light {
+            --bg: #fafafa;
+            --fg: #222;
+            --card: #fff;
+            --card-bg: #fff;
+            --text-color: #222;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--fg);
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 12px 0;
+            margin-bottom: 20px;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .back-button {
+            position: absolute;
+            left: 20px;
+            background: transparent;
+            color: var(--text-color);
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .back-button:hover {
+            transform: translateX(-3px);
+            opacity: 0.8;
+        }
+
+        ul {
+            list-style: none;
+            padding: 0;
+            background: var(--card);
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        li {
+            padding: 10px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        li:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .completed {
+            color: #4caf50;
+            font-weight: bold;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            bottom: 15px;
+            right: 20px;
+            background: var(--card);
+            border: 1px solid var(--border-color);
+            color: var(--fg);
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .btn {
+            background: var(--accent);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            float: right;
+            margin-top: 20px;
+            margin-left: 10px;
+        }
+
+        .btn-danger {
+            background: #c0392b;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(5px);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .progress-bar {
+            width: 100%;
+            background: #333;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .progress-inner {
+            height: 100%;
+            width: 0%;
+            background: var(--accent);
+            transition: width 0.3s;
+        }
+
+        .close-modal {
+            margin-top: 15px;
+            background: var(--accent);
+            color: #fff;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+    <header class="header">
+        <button class="back-button" onclick="window.location.href='/'">⬅️</button>
+        <h1>Generar Clases</h1>
+    </header>
+
+    <ul id="videoList"></ul>
+
+    <button class="btn" onclick="iniciarGeneracion()">Generar Clases</button>
+    <button class="btn btn-danger" onclick="reiniciarEstado()">🔄 Reiniciar estado</button>
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
+
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modalTitle">Progreso</h3>
+            <p id="modalText">Iniciando...</p>
+            <div class="progress-bar">
+                <div id="progressInner" class="progress-inner"></div>
+            </div>
+            <div id="resultado"></div>
+            <button id="closeModal" class="close-modal" onclick="cerrarModal()">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const modal = document.getElementById("modal");
+        const modalText = document.getElementById("modalText");
+        const progressInner = document.getElementById("progressInner");
+        const resultado = document.getElementById("resultado");
+        const closeModal = document.getElementById("closeModal");
+        let intervaloProgreso;
+
+        async function cargarVideos() {
+            const res = await fetch("/generar_clases/listar_videos");
+            const data = await res.json();
+            const list = document.getElementById("videoList");
+            list.innerHTML = "";
+            data.forEach(v => {
+                const li = document.createElement("li");
+                li.innerHTML = `<span>${v.video}</span> <span>${v.annotations} anotaciones ${v.completed ? "✅" : ""}</span>`;
+                if (v.completed) li.classList.add("completed");
+                list.appendChild(li);
+            });
+        }
+
+        async function iniciarGeneracion() {
+            modal.style.display = "flex";
+            modalText.textContent = "Preparando...";
+            resultado.innerHTML = "";
+            progressInner.style.width = "0%";
+            closeModal.style.display = "none";
+
+            await fetch("/generar_clases/generar_clases", { method: "POST" });
+            intervaloProgreso = setInterval(actualizarProgreso, 1000);
+        }
+
+        async function actualizarProgreso() {
+            const res = await fetch("/generar_clases/progreso");
+            const data = await res.json();
+            actualizarModal(data);
+            if (data.status === "done") {
+                clearInterval(intervaloProgreso);
+                closeModal.style.display = "block";
+                cargarVideos();
+            }
+        }
+
+        function actualizarModal(data) {
+            modalText.textContent = data.message;
+            if (data.total > 0) {
+                const pct = (data.progress / data.total) * 100;
+                progressInner.style.width = pct + "%";
+            }
+            if (data.status === "done") {
+                let html = `<h4>${data.message}</h4><ul>`;
+                for (const [cls, count] of Object.entries(data.created_classes)) {
+                    html += `<li>${cls}: ${count} clips</li>`;
+                }
+                html += "</ul>";
+                resultado.innerHTML = html;
+            }
+        }
+
+        async function reiniciarEstado() {
+            if (!confirm("¿Seguro que quieres reiniciar el estado? Se volverán a procesar todos los vídeos.")) return;
+            await fetch("/generar_clases/reiniciar_estado", { method: "POST" });
+            alert("Estado reiniciado correctamente.");
+            cargarVideos();
+        }
+
+        function cerrarModal() {
+            modal.style.display = "none";
+        }
+
+        // Obtener tema guardado o usar "dark" por defecto
+        let theme = localStorage.getItem("theme") || "dark";
+
+        // Aplicar tema inicial
+        document.body.classList.toggle("light", theme === "light");
+
+        // Función para cambiar tema
+        function toggleTheme() {
+            theme = theme === "dark" ? "light" : "dark";  // Alternar valor
+            localStorage.setItem("theme", theme);
+            document.body.classList.toggle("light", theme === "light");
+        }
+
+        cargarVideos();
+    </script>
+</body>
+</html>
