@@ -3,6 +3,7 @@ if __name__ == "__main__": print("Cargando apps...")
 from generador_anotaciones.generar_anotaciones import app as anotacionesApp
 from generar_clases.generar_clases import app as generarClasesApp
 from generar_modelo.generar_modelo_svm import app as generarModeloSVMApp
+from generar_clips_prompt.generar_clips import app as generarClipsApp
 if __name__ == "__main__": print("Apps cargadas")
 
 
@@ -15,6 +16,7 @@ def create_app():
     app.register_blueprint(anotacionesApp, url_prefix="/anotaciones")
     app.register_blueprint(generarClasesApp, url_prefix="/generar_clases")
     app.register_blueprint(generarModeloSVMApp, url_prefix="/generar_modelo")
+    app.register_blueprint(generarClipsApp, url_prefix="/generar_clips")
 
     @app.route("/")
     def index():

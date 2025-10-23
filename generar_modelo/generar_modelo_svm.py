@@ -18,8 +18,8 @@ app = Blueprint("generar_modelo", __name__, template_folder="templates")
 
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
 DATASET_DIR = os.path.join(CURRENT_PATH, "../dataset/")
-OUTPUT_MODEL = os.path.join(CURRENT_PATH, "modelo_rust_svm.pkl")
-LOG_FILE = os.path.join(CURRENT_PATH, "classification_report.log")
+OUTPUT_MODEL = os.path.join(CURRENT_PATH, "../modelos/modelo_rust_svm.pkl")
+LOG_FILE = os.path.join(CURRENT_PATH, "../modelos/classification_report.log")
 FRAME_SAMPLE_RATE = 30
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 

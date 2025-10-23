@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generar Clips por Prompt</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-6">
+    <div class="max-w-5xl mx-auto space-y-6">
+        <h1 class="text-3xl font-bold mb-4">🎬 Generar Clips por Prompt</h1>
+
+        <div class="flex justify-between items-center mb-3">
+            <h2 class="text-xl">📁 Vídeos disponibles</h2>
+            <button id="addVideos" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">Añadir vídeos</button>
+        </div>
+
+        <div id="videoList" class="space-y-2 bg-gray-800 p-4 rounded-lg"></div>
+
+        <textarea id="prompt" class="w-full h-28 p-3 rounded-lg bg-gray-800 text-white"
+            placeholder="prompt: Ej. crea clips de 20 segundos donde se mate enemigos con db"></textarea>
+
+        <div class="flex justify-end">
+            <button id="generateBtn" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg">Generar clips</button>
+        </div>
+
+        <h2 class="text-xl mt-6 mb-3">📋 Clips generados</h2>
+        <div id="clipsList" class="space-y-2 bg-gray-800 p-4 rounded-lg"></div>
+    </div>
+
+    <script>
+        async function loadVideos() {
+            const res = await fetch('/generar_clips/listar_videos');
+            const vids = await res.json();
+            const container = document.getElementById('videoList');
+            container.innerHTML = '';
+            vids.forEach(v => {
+                const el = document.createElement('label');
+                el.className = 'flex items-center space-x-3 hover:bg-gray-700 p-2 rounded cursor-pointer';
+                el.innerHTML = `<input type="checkbox" value="${v}" class="form-checkbox h-5 w-5 text-blue-500">
+                                <span>${v}</span>`;
+                container.appendChild(el);
+            });
+        }
+
+        async function loadClips() {
+            const res = await fetch('/generar_clips/listar_clips');
+            const clips = await res.json();
+            const container = document.getElementById('clipsList');
+            container.innerHTML = '';
+            clips.forEach(c => {
+                const el = document.createElement('div');
+                el.className = 'flex justify-between items-center hover:bg-gray-700 p-2 rounded';
+                el.innerHTML = `<a href="/video/${c.nombre}" target="_blank" class="text-blue-400 hover:underline">${c.nombre}</a>
+                                <span class="text-sm text-gray-400">${c.prompt}</span>`;
+                container.appendChild(el);
+            });
+        }
+
+        document.getElementById('addVideos').onclick = async () => {
+            const res = await fetch('/generar_clips/agregar_videos');
+            const data = await res.json();
+            if (data.success) loadVideos();
+        };
+
+        document.getElementById('generateBtn').onclick = async () => {
+            const prompt = document.getElementById('prompt').value.trim();
+            if (!prompt) return alert('Introduce un prompt.');
+            const selected = [...document.querySelectorAll('#videoList input:checked')].map(e => e.value);
+            if (!selected.length) return alert('Selecciona al menos un vídeo.');
+            const res = await fetch('/generar_clips/generar', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ prompt, videos: selected })
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Clips generados correctamente.');
+                loadClips();
+            }
+        };
+
+        loadVideos();
+        loadClips();
+    </script>
+</body>
+</html>
