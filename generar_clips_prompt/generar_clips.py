@@ -278,11 +278,30 @@ def detectar_clase_test(prompt):
         score = 0
     return cls, round(score,3)
 
+def seleccionar_videos(queue):
+    root = tk.Tk()
+    root.withdraw()
+    paths = filedialog.askopenfilenames(title="Seleccionar vídeos", filetypes=[("Vídeos", "*.mp4;*.mov;*.avi;*.mkv")])
+    queue.put(paths)
+
 # === RUTAS WEB ===
 @app.route('/')
 def index():
     return render_template('generar_clips_index.html')
 
+@app.route('/agregar_videos', methods=['GET'])
+def agregar_videos():
+    q = Queue()
+    p = Process(target=seleccionar_videos, args=(q,))
+    p.start()
+    p.join()
+    paths = q.get()
+    if not paths:
+        return jsonify({"success": False})
+    import shutil
+    for pth in paths:
+        shutil.move(pth, os.path.join(VIDEOS_INPUT_DIR, os.path.basename(pth)))
+    return jsonify({"success": True})
 
 @app.route('/listar_videos')
 def listar_videos():
