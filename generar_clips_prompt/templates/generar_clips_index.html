@@ -1,14 +1,126 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
-    <title>Generar Clips por Prompt</title>
+    <title>Generar Clips</title>
     <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-900 text-white min-h-screen p-6">
-    <div class="max-w-5xl mx-auto space-y-6">
-        <h1 class="text-3xl font-bold mb-4">🎬 Generar Clips por Prompt</h1>
+    <style>
+        :root {
+            --bg: #121212;
+            --fg: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --border-color: #333;
+            --text-color: #e0e0e0;
+        }
 
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: sans-serif;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 12px 0;
+            margin-bottom: 20px;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .back-button {
+            position: absolute;
+            left: 20px;
+            background: transparent;
+            color: var(--text-color);
+            border: none;
+            font-size: 1.3rem;
+            cursor: pointer;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .back-button:hover {
+            transform: translateX(-3px);
+            opacity: 0.8;
+        }
+
+        /* Modal */
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+        }
+
+        pre {
+            background: #0d0d0d;
+            padding: 10px;
+            border-radius: 8px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.4s, bottom 0.4s;
+        }
+
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="header">
+        <button class="back-button" onclick="window.location.href='/'">⬅️</button>
+        <h1>Generar Clips</h1>
+    </header>
+
+    <div class="max-w-5xl mx-auto space-y-6 px-4">
         <div class="flex justify-between items-center mb-3">
             <h2 class="text-xl">📁 Vídeos disponibles</h2>
             <button id="addVideos" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">Añadir vídeos</button>
@@ -17,16 +129,32 @@
         <div id="videoList" class="space-y-2 bg-gray-800 p-4 rounded-lg"></div>
 
         <textarea id="prompt" class="w-full h-28 p-3 rounded-lg bg-gray-800 text-white"
-            placeholder="prompt: Ej. crea clips de 20 segundos donde se mate enemigos con db"></textarea>
+            placeholder="Ej. crea clips de 20 segundos donde se mate enemigos con db"></textarea>
 
         <div class="flex justify-end">
-            <button id="generateBtn" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg">Generar clips</button>
+            <button id="detectarClaseBtn" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg">Detectar Clase</button>
+            <button id="generateBtn" class="bg-green-600 ml-3 hover:bg-green-700 px-6 py-3 rounded-lg">Generar clips</button>
         </div>
 
         <h2 class="text-xl mt-6 mb-3">📋 Clips generados</h2>
         <div id="clipsList" class="space-y-2 bg-gray-800 p-4 rounded-lg"></div>
     </div>
 
+    <!-- Modal de progreso -->
+    <div id="progressModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-xl font-bold mb-3">⏳ Generando clips...</h2>
+            <div id="progressBarContainer" class="w-full bg-gray-700 rounded-full h-3 mb-2 hidden">
+                <div id="progressBar" class="bg-green-500 h-3 rounded-full" style="width:0%"></div>
+            </div>
+            <pre id="logContainer">Esperando inicio...</pre>
+            <div id="closeContainer" class="text-right mt-3 hidden">
+                <button id="closeModal" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">Cerrar</button>
+            </div>
+        </div>
+
+    </div>
+    <div id="toast" class="toast"></div>
     <script>
         async function loadVideos() {
             const res = await fetch('/generar_clips/listar_videos');
@@ -37,7 +165,7 @@
                 const el = document.createElement('label');
                 el.className = 'flex items-center space-x-3 hover:bg-gray-700 p-2 rounded cursor-pointer';
                 el.innerHTML = `<input type="checkbox" value="${v}" class="form-checkbox h-5 w-5 text-blue-500">
-                                <span>${v}</span>`;
+                        <span>${v}</span>`;
                 container.appendChild(el);
             });
         }
@@ -50,11 +178,41 @@
             clips.forEach(c => {
                 const el = document.createElement('div');
                 el.className = 'flex justify-between items-center hover:bg-gray-700 p-2 rounded';
-                el.innerHTML = `<a href="/video/${c.nombre}" target="_blank" class="text-blue-400 hover:underline">${c.nombre}</a>
-                                <span class="text-sm text-gray-400">${c.prompt}</span>`;
+                el.innerHTML = `<a href="/generar_clips/video/${c.nombre}" target="_blank" class="text-blue-400 hover:underline">${c.nombre}</a>
+                        <span class="text-sm text-gray-400">${c.prompt}</span>`;
                 container.appendChild(el);
             });
         }
+
+        function showToast(msg, color = "#333") {
+            const toast = document.getElementById("toast");
+            toast.textContent = msg;
+            toast.style.background = color;
+            toast.className = "toast show";
+            setTimeout(() => { toast.className = "toast"; }, 2000);
+        }
+
+        let progressInterval;
+
+        async function checkProgress() {
+            const res = await fetch('/generar_clips/progreso?_=' + Date.now());
+            const data = await res.json();
+            document.getElementById("logContainer").textContent = data.log;
+
+            if (data.progress !== undefined) {
+                document.getElementById("progressBarContainer").classList.remove("hidden");
+                document.getElementById("progressBar").style.width = data.progress + "%";
+            }
+
+            if (data.done) {
+                clearInterval(progressInterval);
+                document.getElementById("closeContainer").classList.remove("hidden");
+                document.getElementById("progressBar").style.width = "100%";
+                loadClips();
+            }
+        }
+
+
 
         document.getElementById('addVideos').onclick = async () => {
             const res = await fetch('/generar_clips/agregar_videos');
@@ -62,25 +220,48 @@
             if (data.success) loadVideos();
         };
 
+
+
+
+        document.getElementById('detectarClaseBtn').onclick = async () => {
+            const prompt = document.getElementById('prompt').value.trim();
+            if (!prompt) return alert('Introduce un prompt.');
+            const res = await fetch('/generar_clips/detectar_clase', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+            const msg = await res.json();
+            showToast("Clase detectada: " + msg.clase + ". Similaridad: " + msg.similaridad, "#025902")
+        }
+
+
         document.getElementById('generateBtn').onclick = async () => {
             const prompt = document.getElementById('prompt').value.trim();
             if (!prompt) return alert('Introduce un prompt.');
             const selected = [...document.querySelectorAll('#videoList input:checked')].map(e => e.value);
             if (!selected.length) return alert('Selecciona al menos un vídeo.');
-            const res = await fetch('/generar_clips/generar', {
+
+            document.getElementById('progressModal').classList.add('active');
+            document.getElementById('logContainer').textContent = "Preparando...";
+            document.getElementById("closeContainer").classList.add("hidden");
+
+            await fetch('/generar_clips/generar', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt, videos: selected })
             });
-            const data = await res.json();
-            if (data.success) {
-                alert('Clips generados correctamente.');
-                loadClips();
-            }
+
+            progressInterval = setInterval(checkProgress, 1000);
+        };
+
+        document.getElementById('closeModal').onclick = () => {
+            document.getElementById('progressModal').classList.remove('active');
         };
 
         loadVideos();
         loadClips();
     </script>
 </body>
+
 </html>
