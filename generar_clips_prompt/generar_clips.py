@@ -177,8 +177,12 @@ def generar_clips(video_path, prompt, threshold=0.25):
     os.makedirs(cache_dir, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps_video = cap.get(cv2.CAP_PROP_FPS)
+    frame_count_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
+
+    step = max(1, int(fps_video // 1))  # fps de extracción
+    total_frames = max(1, frame_count_video // step)
 
     use_cache = any(f.endswith(".npy") for f in os.listdir(cache_dir))
     frame_stream = (
@@ -201,7 +205,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
         target_probs.extend(probs)
         frame_counter += len(batch_frames)
 
-        percent = min(99, round((frame_counter / total_frames) * 80, 1))
+        percent = min(100, round((frame_counter / total_frames) * 100, 1))
         log_progress(f"⏱️ Procesados {frame_counter}/{total_frames} frames ({percent}%)", progress=percent)
 
         del batch_frames, batch_times, feats, probs
