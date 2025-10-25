@@ -9,7 +9,7 @@ from sklearn.preprocessing import normalize
 from transformers import CLIPProcessor, CLIPModel
 import joblib
 import subprocess
-from multiprocessing import Pool, cpu_count, Process, Queue
+from multiprocessing import  Process, Queue
 import tkinter as tk
 from tkinter import filedialog
 
@@ -180,7 +180,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
     fps_video = cap.get(cv2.CAP_PROP_FPS)
     frame_count_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
-
+    
     step = max(1, int(fps_video // 1))  # fps de extracción
     total_frames = max(1, frame_count_video // step)
 

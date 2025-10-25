@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Anotador de segmentos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
             --bg-color: #121212;
@@ -53,7 +54,10 @@
             padding: 10px;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
             position: relative;
-            /* para el botón de eliminar */
+        }
+
+        #anotacionText {
+            width: 400px;
         }
 
         video {
@@ -110,6 +114,30 @@
             opacity: 0.9;
         }
 
+        .tag {
+            background: var(--input-bg);
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-left: 4px;
+            margin-bottom: 4px;
+            cursor: pointer;
+            display: inline-block;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .tag:hover {
+            background: var(--border-color);
+        }
+
+        #tagContainer {
+            width: 650px;
+        }
+
+        #anotacionesList {
+            width: 520px;
+        }
+
         .page-controls {
             margin-top: 20px;
             display: none;
@@ -125,22 +153,6 @@
         .page-numbers .current {
             text-decoration: underline;
             font-weight: bold;
-        }
-
-        .tag {
-            background: var(--input-bg);
-            padding: 4px 8px;
-            border-radius: 6px;
-            margin-left: 4px;
-            margin-bottom: 4px;
-            cursor: pointer;
-            display: inline-block;
-            font-size: 13px;
-            transition: background 0.2s;
-        }
-
-        .tag:hover {
-            background: var(--border-color);
         }
 
         .toast {
@@ -201,7 +213,6 @@
             opacity: 0.8;
         }
 
-        /* Botón de eliminar anotación */
         .delete-btn {
             position: absolute;
             top: 8px;
@@ -218,6 +229,107 @@
             opacity: 0.7;
         }
     </style>
+
+    <style>
+        .bg-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        video {
+            width: 640px;
+            border-radius: 8px;
+        }
+
+        .timeline-container {
+            position: relative;
+            width: 640px;
+            height: 10px;
+            background: #ddd;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .progress-fill-top {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background: #7378ff;
+            border-radius: 5px;
+        }
+
+        .scrub-handle {
+            position: absolute;
+            top: -4px;
+            width: 12px;
+            height: 18px;
+            background: #2a2aff;
+            border-radius: 4px;
+            transform: translateX(-50%);
+            cursor: pointer;
+        }
+
+        .timeline-bottom {
+            position: relative;
+            width: 640px;
+            height: 14px;
+            background: #ccc;
+            border-radius: 7px;
+            margin-top: 12px;
+        }
+
+        .marker {
+            position: absolute;
+            top: -3px;
+            width: 8px;
+            height: 20px;
+            border-radius: 3px;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+        }
+
+        #markerStart {
+            background: #0078d7;
+        }
+
+        #markerEnd {
+            background: #e63946;
+        }
+
+        .selection-range {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(115, 120, 255, 0.4);
+            border-radius: 5px;
+        }
+
+        input {
+            width: 100px;
+            text-align: center;
+        }
+
+        input+button {
+            cursor: pointer;
+        }
+
+        .noselect {
+            user-select: none;
+        }
+
+        .btnContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .btnContainer div {
+            margin-bottom: 5px;
+        }
+    </style>
+
 </head>
 
 <body>
@@ -226,8 +338,8 @@
     <div id="videoModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); background:#222; color:#fff; padding:20px; border-radius:10px; z-index:1001; max-width:600px; width:90%;">
         <h3>Selecciona un vídeo</h3>
         <ul id="videoList" style="list-style:none; padding:0; max-height:300px; overflow-y:auto;"></ul>
-        <button onclick="abrirNuevoVideo()">📁 Cargar nuevos vídeos</button>
-        <button onclick="cerrarModal()" style="margin-left:10px;">❌ Cerrar</button>
+        <button class="bg-blue-600 hover:bg-blue-700 mt-2 px-4 py-2 rounded-lg" onclick="abrirNuevoVideo()">📁 Cargar nuevos vídeos</button>
+        <button class="bg-red-600 hover:bg-red-700 mt-2 px-4 py-2 rounded-lg" onclick="cerrarModal()" style="margin-left:10px;">❌ Cerrar</button>
     </div>
 
     <header class="header">
@@ -235,79 +347,381 @@
         <h1>Generador de anotaciones</h1>
     </header>
 
-    <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
+    <div class="bg-container">
+        <button class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg" onclick="abrirVideo()">🎥 Abrir vídeo</button>
+        <video id="videoPlayer" controls></video>
 
-    <div>
-        <label>Duración de segmento (segundos): </label>
-        <input type="number" id="segmentDuration" value="5" min="1" style="width:80px">
-        <button onclick="abrirVideo()">🎥 Abrir vídeo</button>
+        <!-- Timeline superior (scrub dentro del rango) -->
+        <div class="timeline-container" id="timelineTop">
+            <div class="progress-fill-top" id="progressFillTop"></div>
+            <div class="scrub-handle" id="scrubHandle"></div>
+        </div>
+
+        <!-- Timeline inferior con markers -->
+        <div class="timeline-bottom" id="timelineBottom">
+            <div class="selection-range" id="selectionRange"></div>
+            <div class="marker" id="markerStart"></div>
+            <div class="marker" id="markerEnd"></div>
+        </div>
+
+        <div class="btnContainer">
+            <div>
+                Inicio:
+                <input id="start" type="text" readonly>
+                <button id="startDec" title="Restar 1s">⬅️</button>
+                <button id="startInc" title="Sumar 1s">➡️</button>
+            </div>
+            <div>
+                Fin:
+                <input id="end" type="text" readonly>
+                <button id="endDec" title="Restar 1s">⬅️</button>
+                <button id="endInc" title="Sumar 1s">➡️</button>
+            </div>
+            <div>
+                <!-- Nuevos botones para mover el segmento -->
+                <button id="segmentDec" title="Mover segmento 1s atrás">⬅️</button>
+                <button id="segmentInc" title="Mover segmento 1s adelante">➡️</button>
+            </div>
+
+        </div>
     </div>
 
-    <div id="segmentsContainer"></div>
+    <div class="bg-container">
 
-    <div class="page-controls">
-        <button onclick="prevPage()">⬅️ Anterior</button>
-        <button onclick="nextPage()">Siguiente ➡️</button>
-        <div class="page-numbers" id="pageNumbers"></div>
+        <input id="anotacionText" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500" placeholder="Anotación">
+        <div id="tagContainer">
+
+        </div>
+        <button id="saveButton" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg" style="display:none;" onclick="guardarAnotaciones()">💾 Guardar anotación</button>
+        <div id="anotacionesList" class="space-y-2 mt-4 bg-gray-800 p-4 rounded-lg"></div>
     </div>
 
-    <button id="saveButton" style="display:none;" onclick="guardarAnotaciones()">💾 Guardar anotaciones</button>
-
+    </div>
     <div id="toast" class="toast"></div>
 
+    <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
+
+
+
     <script>
-        // Obtener tema guardado o usar "dark" por defecto
-        let theme = localStorage.getItem("theme") || "dark";
+        const video = document.getElementById("videoPlayer");
+        const openBtn = document.getElementById("openVideo");
+        const timelineTop = document.getElementById("timelineTop");
+        const timelineBottom = document.getElementById("timelineBottom");
+        const scrubHandle = document.getElementById("scrubHandle");
+        const progressFillTop = document.getElementById("progressFillTop");
+        const markerStart = document.getElementById("markerStart");
+        const markerEnd = document.getElementById("markerEnd");
+        const selectionRange = document.getElementById("selectionRange");
+        const startInput = document.getElementById("start");
+        const endInput = document.getElementById("end");
+        const toast = document.getElementById("toast");
+        const startDecBtn = document.getElementById("startDec");
+        const startIncBtn = document.getElementById("startInc");
+        const endDecBtn = document.getElementById("endDec");
+        const endIncBtn = document.getElementById("endInc");
 
-        // Aplicar tema inicial
-        document.body.classList.toggle("light", theme === "light");
+        let videoDuration = 0;
+        let markerStartPct = 0;
+        let markerEndPct = 100;
+        let scrubbing = false;
+        let draggingMarker = null;
+        let draggingRange = false;
+        let dragOffset = 0;
+        let wasPlayingBeforeDrag = false;
+        let clipQueue = [];
+        let processingClip = false;
 
-        // Función para cambiar tema
-        function toggleTheme() {
-            theme = theme === "dark" ? "light" : "dark";  // Alternar valor
-            localStorage.setItem("theme", theme);
-            document.body.classList.toggle("light", theme === "light");
-        }
-        document.addEventListener("DOMContentLoaded", () => {
-            const savedTheme = localStorage.getItem("theme") || "dark";
-            applyTheme(savedTheme);
+        let shiftPressed = false;
+        let controlPressed = false;
+        document.addEventListener('keydown', e => {
+            if (e.key === "Shift" && !shiftPressed) { shiftPressed = true; }
+            if (e.key === "Control" && !controlPressed) { controlPressed = true; }
         });
+        document.addEventListener('keyup', e => {
+            if (e.key === "Shift") { shiftPressed = false; }
+            if (e.key === "Control") { controlPressed = false; }
+        });
+
+
+
+        function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00:00";
+            const h = Math.floor(sec / 3600).toString().padStart(2, "0");
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
+            const s = Math.floor(sec % 60).toString().padStart(2, "0");
+            const ms = Math.floor((sec % 1) * 100).toString().padStart(2, "0"); // centésimas
+            return `${h}:${m}:${s}.${ms}`;
+        }
+        function showToast(msg) {
+            toast.textContent = msg;
+            toast.classList.add("show");
+            setTimeout(() => toast.classList.remove("show"), 2000);
+        }
+
+        video.onloadedmetadata = () => {
+            videoDuration = video.duration;
+            updateMarkers();
+        };
+
+        video.ontimeupdate = () => {
+            if (!videoDuration) return;
+            const current = video.currentTime;
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((current - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+            scrubHandle.style.left = normPct + "%";
+
+            if (current >= endTime) {
+                video.currentTime = startTime;
+                video.play();
+            }
+        };
+
+        function updateMarkers() {
+            markerStart.style.left = markerStartPct + "%";
+            markerEnd.style.left = markerEndPct + "%";
+            selectionRange.style.left = markerStartPct + "%";
+            selectionRange.style.width = (markerEndPct - markerStartPct) + "%";
+            const sSec = (markerStartPct / 100) * videoDuration;
+            const eSec = (markerEndPct / 100) * videoDuration;
+            startInput.value = formatTime(sSec);
+            endInput.value = formatTime(eSec);
+            startInput.dataset.sec = sSec;
+            endInput.dataset.sec = eSec;
+        }
+
+        // ==== Botones de ajuste 1s ====
+        startDecBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            s = clamp(s - timeToChange, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            startInput.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+        startIncBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            s = clamp(s + timeToChange, 0, parseFloat(endInput.dataset.sec) - 0.1);
+            startInput.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+        endDecBtn.onclick = () => {
+            let e = parseFloat(endInput.dataset.sec);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            e = clamp(e - timeToChange, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            endInput.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(startInput.dataset.sec);
+            video.currentTime = Math.max(e - 3, s);
+            video.play();
+        };
+        endIncBtn.onclick = () => {
+            let e = parseFloat(endInput.dataset.sec);
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            e = clamp(e + timeToChange, parseFloat(startInput.dataset.sec) + 0.1, videoDuration);
+            endInput.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(startInput.dataset.sec);
+            video.currentTime = Math.max(e - 3, s);
+            video.play();
+        };
+
+        // ==== Scrubbing timeline superior ====
+        timelineTop.addEventListener("pointerdown", ev => {
+            scrubbing = true;
+            wasPlayingBeforeDrag = !video.paused;
+            if (wasPlayingBeforeDrag) video.pause();
+            timelineTop.setPointerCapture(ev.pointerId);
+            handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointermove", ev => {
+            if (scrubbing) handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointerup", ev => {
+            if (scrubbing) {
+                scrubbing = false;
+                timelineTop.releasePointerCapture(ev.pointerId);
+                video.play();
+            }
+        });
+        function handleScrub(ev) {
+            const rect = timelineTop.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const clamped = clamp(pct, markerStartPct, markerEndPct);
+            const newTime = (clamped / 100) * videoDuration;
+            video.currentTime = newTime;
+
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((newTime - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            scrubHandle.style.left = normPct + "%";
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+        }
+
+        // ==== Markers ====
+        markerStart.addEventListener("pointerdown", ev => {
+            draggingMarker = "start";
+            document.body.classList.add("noselect");
+            markerStart.setPointerCapture(ev.pointerId);
+        });
+        markerEnd.addEventListener("pointerdown", ev => {
+            draggingMarker = "end";
+            document.body.classList.add("noselect");
+            markerEnd.setPointerCapture(ev.pointerId);
+        });
+        markerStart.addEventListener("pointermove", ev => handleMarkerDrag(ev, "start"));
+        markerEnd.addEventListener("pointermove", ev => handleMarkerDrag(ev, "end"));
+        markerStart.addEventListener("pointerup", ev => handleMarkerRelease(ev, "start"));
+        markerEnd.addEventListener("pointerup", ev => handleMarkerRelease(ev, "end"));
+
+        function handleMarkerDrag(ev, which) {
+            if (draggingMarker !== which) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const gap = 0.1;
+            if (which === "start") {
+                markerStartPct = clamp(pct, 0, markerEndPct - gap);
+            } else {
+                markerEndPct = clamp(pct, markerStartPct + gap, 100);
+            }
+            updateMarkers();
+        }
+        function handleMarkerRelease(ev, which) {
+            if (draggingMarker !== which) return;
+            ev.target.releasePointerCapture(ev.pointerId);
+            document.body.classList.remove("noselect");
+            if (which === "start") {
+                video.currentTime = parseFloat(startInput.dataset.sec);
+                video.play();
+            } else {
+                const s = parseFloat(startInput.dataset.sec);
+                const e = parseFloat(endInput.dataset.sec);
+                video.currentTime = Math.max(e - 3, s);
+                video.play();
+            }
+            draggingMarker = null;
+        }
+
+        const segmentDecBtn = document.getElementById("segmentDec");
+        const segmentIncBtn = document.getElementById("segmentInc");
+
+        // Mover segmento 1s atrás
+        segmentDecBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            let e = parseFloat(endInput.dataset.sec);
+            const duration = e - s;
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            // Calcula nuevo inicio, sin salirse de 0
+            s = clamp(s - timeToChange, 0, videoDuration - duration);
+            e = s + duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+
+        // Mover segmento 1s adelante
+        segmentIncBtn.onclick = () => {
+            let s = parseFloat(startInput.dataset.sec);
+            let e = parseFloat(endInput.dataset.sec);
+            const duration = e - s;
+            var timeToChange = 1
+            if (shiftPressed && !controlPressed) {
+                timeToChange = 0.1
+            } else if (shiftPressed && controlPressed) {
+                timeToChange = 0.01
+            }
+            // Calcula nuevo final, sin salirse de videoDuration
+            e = clamp(e + timeToChange, duration, videoDuration);
+            s = e - duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            video.currentTime = s;
+            video.play();
+        };
+
+
+        // ==== Rango selection ====
+        selectionRange.addEventListener("pointerdown", ev => {
+            draggingRange = true;
+            document.body.classList.add("noselect");
+            selectionRange.setPointerCapture(ev.pointerId);
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            dragOffset = x - (markerStartPct / 100) * rect.width;
+        });
+        selectionRange.addEventListener("pointermove", ev => {
+            if (!draggingRange) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left - dragOffset, 0, rect.width);
+            const rangeWidth = ((markerEndPct - markerStartPct) / 100) * rect.width;
+            let newStart = (x / rect.width) * 100;
+            let newEnd = ((x + rangeWidth) / rect.width) * 100;
+            const shift = newEnd > 100 ? newEnd - 100 : newStart < 0 ? newStart : 0;
+            markerStartPct = clamp(newStart - shift, 0, 100);
+            markerEndPct = clamp(newEnd - shift, 0, 100);
+            updateMarkers();
+        });
+        selectionRange.addEventListener("pointerup", ev => {
+            if (!draggingRange) return;
+            selectionRange.releasePointerCapture(ev.pointerId);
+            draggingRange = false;
+            document.body.classList.remove("noselect");
+            video.currentTime = parseFloat(startInput.dataset.sec);
+            video.play();
+        });
+
+
     </script>
 
     <script>
-        let allSegments = [];
-        let annotations = [];
-        let tags = [];
-        let currentPage = 0;
-        const perPage = 5;
-        let shiftPressed = false;
-        var endpoint = "/anotaciones";
-
-        document.addEventListener('keydown', e => {
-            if (e.key === "Shift" && !shiftPressed) { shiftPressed = true; updateButtonLabels(); }
-        });
-        document.addEventListener('keyup', e => {
-            if (e.key === "Shift") { shiftPressed = false; updateButtonLabels(); }
-        });
-
-        function showToast(msg, color = "#333") {
-            const toast = document.getElementById("toast");
-            toast.textContent = msg;
-            toast.style.background = color;
-            toast.className = "toast show";
-            setTimeout(() => { toast.className = "toast"; }, 2000);
-        }
-
-        function secondsToHMS(sec) {
-            const h = Math.floor(sec / 3600);
-            const m = Math.floor((sec % 3600) / 60);
-            const s = Math.floor(sec % 60);
-            const ms = Math.round((sec - Math.floor(sec)) * 1000);
-            let timeStr = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-            if (ms > 0) timeStr += `.${ms.toString().padStart(3, "0")}`;
-            return timeStr;
-        }
-
+        const endpoint = "/anotaciones";
+        const anotacionesListContainer = document.getElementById("anotacionesList")
+        const inputAnotacionText = document.getElementById("anotacionText")
         async function abrirVideo() {
             document.getElementById("modalOverlay").style.display = "block";
             document.getElementById("videoModal").style.display = "block";
@@ -373,8 +787,20 @@
             }
         }
 
-        let currentVideoName = null;
+        function renderTags(tags) {
+            const tagContainer = document.getElementById("tagContainer")
+            tagContainer.innerHTML = "";
+            tags.forEach(t => {
+                const tagEl = document.createElement("span");
+                tagEl.className = "tag";
+                tagEl.textContent = t;
+                tagEl.onclick = () => inputAnotacionText.value = t;
+                tagContainer.appendChild(tagEl);
+            });
+        }
 
+        let currentVideoName = null;
+        var anotacionesVideoActual = [];
         async function seleccionarVideoModal(nombreVideo) {
             currentVideoName = nombreVideo; // Guardar nombre actual
             cerrarModal();
@@ -385,8 +811,55 @@
 
             annotations = data.annotations || [];
             tags = data.tags || [];
-            await fetchSegments(document.getElementById("segmentDuration").value);
+
+            video.src = data.video_url
+
+
+            anotacionesVideoActual = annotations
+
+            cargarAnotacionesVideoActual()
+
+            renderTags(data.tags)
+
             showToast("Vídeo cargado correctamente", "#27ae60");
+            document.getElementById("saveButton").style.display = ""
+        }
+
+        async function cargarAnotacionesVideoActual() {
+            anotacionesListContainer.innerHTML = ""
+            anotacionesVideoActual.forEach(anotacion => {
+                var anotacionContainer = document.createElement("div")
+                anotacionContainer.className = "cursor-pointer flex justify-between items-center hover:bg-gray-700 p-2 rounded"
+                anotacionContainer.onclick = () => {
+                    inputAnotacionText.value = anotacion.label
+                    startInput.dataset.sec = anotacion.start;
+                    markerStartPct = (anotacion.start / videoDuration) * 100;
+
+                    endInput.dataset.sec = anotacion.end;
+                    markerEndPct = (anotacion.end / videoDuration) * 100;
+
+
+                    updateMarkers();
+                    video.currentTime = anotacion.start;
+                    video.play();
+                }
+                var anotacionLink = document.createElement("a")
+                anotacionLink.className = "text-blue-400 hover:underline"
+                anotacionLink.textContent = anotacion.start_str + "-" + anotacion.end_str
+                var anotacionLabel = document.createElement("span")
+                anotacionLabel.className = "text-sm text-gray-400"
+                anotacionLabel.textContent = anotacion.label
+                var anotacionDelete = document.createElement("button")
+                anotacionDelete.textContent = "❌"
+                anotacionDelete.onclick = () => {
+                    eliminarAnotacion(anotacionesVideoActual.indexOf(anotacion))
+                }
+
+                anotacionContainer.appendChild(anotacionLink)
+                anotacionContainer.appendChild(anotacionLabel)
+                anotacionContainer.appendChild(anotacionDelete)
+                anotacionesListContainer.appendChild(anotacionContainer)
+            });
         }
 
         async function abrirNuevoVideo() {
@@ -398,214 +871,60 @@
             }
         }
 
-        async function fetchSegments(duration) {
-            const res = await fetch(endpoint + "/get_segments", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ segment_duration: duration })
-            });
-            const data = await res.json();
-            if (data.error) return showToast(data.error, "#c0392b");
-
-            allSegments = [...data];
-            annotations.forEach(a => {
-                const idx = allSegments.findIndex(s => s.start === a.start && s.end === a.end);
-                if (idx >= 0) {
-                    allSegments[idx] = { ...a };
-                } else {
-                    allSegments.push({ ...a });
-                }
-            });
-
-            allSegments.sort((a, b) => a.start - b.start);
-
-            currentPage = 0;
-            renderPage();
-            renderPagination();
-            document.getElementById("saveButton").style.display = "inline-block";
-            document.getElementsByClassName("page-controls")[0].style.display = "flex";
-        }
-
-        function renderPagination() {
-            const pages = Math.ceil(allSegments.length / perPage);
-            const cont = document.getElementById("pageNumbers");
-            cont.innerHTML = "";
-            for (let i = 0; i < pages; i++) {
-                const span = document.createElement("span");
-                span.textContent = i + 1;
-                span.className = i === currentPage ? "current" : "";
-                span.onclick = () => goToPage(i);
-                cont.appendChild(span);
-            }
-        }
-
-        function renderTags(container, input) {
-            container.innerHTML = "";
-            tags.forEach(t => {
-                const tagEl = document.createElement("span");
-                tagEl.className = "tag";
-                tagEl.textContent = t;
-                tagEl.onclick = () => input.value = t;
-                container.appendChild(tagEl);
-            });
-        }
-
-        function updateTagsAllSegments() {
-            const container = document.getElementById("segmentsContainer");
-            const segmentDivs = container.querySelectorAll(".segment");
-            segmentDivs.forEach(segDiv => {
-                const input = segDiv.querySelector("input[type=text]");
-                const tagContainer = segDiv.querySelector(".tag-container");
-                if (input && tagContainer) renderTags(tagContainer, input);
-            });
-        }
-
-        function renderPage() {
-            const container = document.getElementById("segmentsContainer");
-            container.innerHTML = "";
-
-            const startIdx = currentPage * perPage;
-            const subset = allSegments.slice(startIdx, startIdx + perPage);
-            const total = allSegments.length;
-
-            subset.forEach((s, idx) => {
-                const segIndex = startIdx + idx;
-                const segDiv = document.createElement("div");
-                segDiv.className = "segment";
-
-                const video = document.createElement("video");
-                video.controls = true;
-                video.src = `/anotaciones/video?video=${encodeURIComponent(currentVideoName)}#t=${s.start},${s.end}`;
-                video.id = `video_${segIndex}`;
-                video.addEventListener("timeupdate", () => { if (video.currentTime >= s.end) video.currentTime = s.start; });
-
-                const infoDiv = document.createElement("div");
-                infoDiv.className = "segment-info";
-
-                const labelP = document.createElement("p");
-                labelP.id = `time_${segIndex}`;
-                labelP.textContent = `${secondsToHMS(s.start)} - ${secondsToHMS(s.end)}`;
-
-                const input = document.createElement("input");
-                input.type = "text";
-                input.placeholder = "Escribe anotación...";
-                input.value = s.label || "";
-
-                const indicator = document.createElement("span");
-                indicator.style.marginLeft = "10px";
-                indicator.textContent = `[${segIndex + 1}/${total}]`;
-
-                const editBtn = document.createElement("button");
-                editBtn.textContent = "✏️ Editar segmento";
-                editBtn.style.marginLeft = "10px";
-                editBtn.onclick = () => toggleSegmentControls(segIndex);
-
-                const tagContainer = document.createElement("span");
-                tagContainer.className = "tag-container";
-                renderTags(tagContainer, input);
-
-                const controlsDiv = document.createElement("div");
-                controlsDiv.className = "segment-controls";
-                controlsDiv.id = `controls_${segIndex}`;
-
-                const btnData = [
-                    ["⬅️ Inicio -1s", "start", -1],
-                    ["Inicio +1s ➡️", "start", 1],
-                    ["⬅️ Fin -1s", "end", -1],
-                    ["Fin +1s ➡️", "end", 1]
-                ];
-                btnData.forEach(([txt, part, delta]) => {
-                    const b = document.createElement("button");
-                    b.dataset.baseText = txt;
-                    b.textContent = txt;
-                    b.onmousedown = () => adjustSegment(segIndex, part, delta);
-                    controlsDiv.appendChild(b);
-                });
-
-                // Botón de eliminar anotación
-                const clearBtn = document.createElement("button");
-                clearBtn.textContent = "❌";
-                clearBtn.title = "Limpiar anotación";
-                clearBtn.className = "delete-btn";
-                clearBtn.onclick = async () => {
-                    input.value = "";
-                    s.label = "";
-                    annotations = allSegments.filter(seg => seg.label);
-                    await fetch(endpoint + "/save_annotations", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ annotations })
-                    });
-                    showToast("Anotación borrada", "#c0392b");
-                };
-
-                infoDiv.append(labelP, input, indicator, editBtn, controlsDiv, tagContainer, clearBtn);
-                segDiv.append(video, infoDiv);
-                container.appendChild(segDiv);
-            });
-        }
-
-        function toggleSegmentControls(index) {
-            const div = document.getElementById(`controls_${index}`);
-            div.style.display = div.style.display === "block" ? "none" : "block";
-        }
-
-        function adjustSegment(index, part, delta) {
-            const s = allSegments[index];
-            if (!s) return;
-            const step = shiftPressed ? 0.1 : 1;
-            if (part === "start") {
-                s.start = Math.max(0, s.start + delta * step);
-                if (s.start >= s.end) s.start = s.end - 0.1;
-            } else {
-                s.end = Math.max(s.start + 0.1, s.end + delta * step);
-            }
-            const labelP = document.getElementById(`time_${index}`);
-            if (labelP) labelP.textContent = `${secondsToHMS(s.start)} - ${secondsToHMS(s.end)}`;
-            const video = document.getElementById(`video_${index}`);
-            if (video) video.currentTime = s.start;
-        }
-
-        function goToPage(i) { guardarAnotaciones(false); currentPage = i; renderPage(); renderPagination(); }
-        function nextPage() { if ((currentPage + 1) * perPage < allSegments.length) { guardarAnotaciones(false); currentPage++; renderPage(); renderPagination(); } }
-        function prevPage() { if (currentPage > 0) { guardarAnotaciones(false); currentPage--; renderPage(); renderPagination(); } }
-
         async function guardarAnotaciones(showToastMsg = true) {
-            const startIdx = currentPage * perPage;
-            const subset = allSegments.slice(startIdx, startIdx + perPage);
-            subset.forEach((s, i) => {
-                const input = document.querySelectorAll(".segment input")[i];
-                const label = input?.value?.trim();
-                if (label && label.length > 0) s.label = label;
-            });
-
-            annotations = allSegments.filter(s => s.label);
+            var start_str = document.getElementById("start").value
+            var end_str = document.getElementById("end").value
+            var label = inputAnotacionText.value
+            anotacionesVideoActual[anotacionesVideoActual.length] = { start: startInput.dataset.sec, end: endInput.dataset.sec, start_str, end_str, label }
             const res = await fetch(endpoint + "/save_annotations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ annotations })
+                body: JSON.stringify({ annotations: anotacionesVideoActual })
             });
             const result = await res.json();
             tags = result.tags || tags;
-            updateTagsAllSegments();
+            cargarAnotacionesVideoActual()
             if (showToastMsg) showToast("Anotaciones guardadas correctamente", "#27ae60");
         }
 
-        function updateButtonLabels() {
-            const controls = document.querySelectorAll('.segment-controls');
-            controls.forEach(div => {
-                const buttons = div.querySelectorAll('button');
-                buttons.forEach(b => {
-                    let text = b.dataset.baseText;
-                    if (shiftPressed) {
-                        if (text.includes('+1s')) text = text.replace('+1s', '+0.1s');
-                        if (text.includes('-1s')) text = text.replace('-1s', '-0.1s');
-                    }
-                    b.textContent = text;
-                });
+        async function eliminarAnotacion(index, showToastMsg = true) {
+            const res = await fetch(endpoint + "/eliminar_anotacion", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ index, video: currentVideoName })
             });
+            const result = await res.json();
+            if (showToastMsg) {
+                if (result.status == "ok") {
+                    anotacionesVideoActual = result.annotations
+                    cargarAnotacionesVideoActual()
+                    showToast("Anotación eliminada", "#270000");
+                } else {
+                    showToast("Error: " + result.message, "#270000");
+                }
+            }
         }
+
     </script>
+
+
+
+    <script>
+        // Obtener tema guardado o usar "dark" por defecto
+        let theme = localStorage.getItem("theme") || "dark";
+
+        // Aplicar tema inicial
+        document.body.classList.toggle("light", theme === "light");
+
+        // Función para cambiar tema
+        function toggleTheme() {
+            theme = theme === "dark" ? "light" : "dark";  // Alternar valor
+            localStorage.setItem("theme", theme);
+            document.body.classList.toggle("light", theme === "light");
+        }
+
+    </script>
+
 </body>
 
 </html>

@@ -2,7 +2,7 @@ import os
 import json
 import time
 import cv2
-from flask import render_template, request, jsonify, make_response, send_file, Blueprint
+from flask import Flask, render_template, request, jsonify, make_response, send_file, Blueprint
 from multiprocessing import Process, Queue
 import tkinter as tk
 from tkinter import filedialog
@@ -38,6 +38,30 @@ def sec_to_hhmmss(seconds):
     s = int(seconds % 60)
     return f"{h:02d}:{m:02d}:{s:02d}"
 
+
+def get_segments(video_path, segment_duration):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError("No se pudo abrir el vídeo")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_length = total_frames / fps
+
+    segments = []
+    start_time = 0.0
+    while start_time < video_length:
+        end_time = min(start_time + segment_duration, video_length)
+        segments.append({
+            "start": start_time,
+            "end": end_time,
+            "start_str": sec_to_hhmmss(start_time),
+            "end_str": sec_to_hhmmss(end_time)
+        })
+        start_time += segment_duration
+
+    cap.release()
+    return segments
 
 def get_most_common_labels(max_labels=15):
     labels = []
@@ -126,6 +150,17 @@ def video_file():
 
 
 
+@app.route('/get_segments', methods=['POST'])
+def get_segments_route():
+    global videoPath
+    if not videoPath:
+        return jsonify({"error": "No hay vídeo abierto"}), 400
+
+    data = request.json
+    segment_duration = float(data.get("segment_duration", SEGMENT_DURATION))
+    segments = get_segments(videoPath, segment_duration)
+    return jsonify(segments)
+
 
 @app.route("/save_annotations", methods=["POST"])
 def save_annotations():
@@ -149,7 +184,7 @@ def save_annotations():
     return jsonify({"status": "ok", "saved_to": output_file, "tags": updated_tags})
 
 
-@app.route("/eliminar_anotacion", methods=["POST"])
+@app.route("/eliminar", methods=["POST"])
 def eliminar_anotacion():
     data = request.get_json()
     video_file = data.get("video")
@@ -167,7 +202,7 @@ def eliminar_anotacion():
             annotations.pop(index)
             with open(annotations_path, "w", encoding="utf-8") as f:
                 json.dump(annotations, f, indent=2, ensure_ascii=False)
-            return jsonify({"status": "ok", "annotations": annotations})
+            return jsonify({"status": "ok"})
         else:
             return jsonify({"status": "error", "message": "Índice fuera de rango"})
     except Exception as e:
