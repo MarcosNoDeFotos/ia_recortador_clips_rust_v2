@@ -137,9 +137,10 @@ def generar_modelo():
         tasks = []
         for label, cls in enumerate(classes):
             cls_path = os.path.join(DATASET_DIR, cls)
-            for file in os.listdir(cls_path):
-                if file.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
-                    tasks.append((cls, file, label, model, processor))
+            if os.path.isdir(cls_path):
+                for file in os.listdir(cls_path):
+                    if file.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
+                        tasks.append((cls, file, label, model, processor))
 
         total = len(tasks)
         progress_data["total"] = total
