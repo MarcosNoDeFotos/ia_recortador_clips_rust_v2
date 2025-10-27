@@ -159,7 +159,7 @@ def generar_clases():
         # === Al finalizar ===
         progress_data.update({
             "status": "done",
-            "progress": 100,  # 👈 fuerza barra al 100%
+            "progress": progress_data["total"],  # 👈 fuerza barra al 100%
             "message": f"Se han creado {len(progress_data['created_classes'])} clases.",
         })
 
