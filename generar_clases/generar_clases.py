@@ -151,7 +151,7 @@ def generar_clases():
                 save_completed_videos(completed)
 
                 processed_videos += 1
-                progress_data["progress"] = processed_videos / total_videos * 100  # 👈 porcentaje real
+                progress_data["progress"] = processed_videos
 
             except Exception as e:
                 progress_data["message"] = f"Error procesando {video_file}: {e}"
