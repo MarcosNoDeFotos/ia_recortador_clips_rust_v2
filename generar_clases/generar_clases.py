@@ -96,6 +96,8 @@ def generar_clases():
             })
             return
 
+        processed_videos = 0  # 👈 contador de vídeos realmente procesados
+
         for i, video_file in enumerate(pendientes, 1):
             try:
                 progress_data["message"] = f"Procesando vídeo {i}/{total_videos}: {video_file}"
@@ -113,12 +115,13 @@ def generar_clases():
                     progress_data["message"] = f"Sin anotaciones en {video_file}, se omite."
                     continue
 
+                # === Si llega aquí, sí se procesa el vídeo ===
                 for ann in annotations:
                     label = ann.get("label")
                     start = ann.get("start")
                     end = ann.get("end")
-                    start_str = ann.get("start_str").replace(":", "-")
-                    end_str = ann.get("end_str").replace(":", "-")
+                    start_str = ann.get("start_str", "").replace(":", "-")
+                    end_str = ann.get("end_str", "").replace(":", "-")
 
                     if not label or start is None or end is None:
                         continue
@@ -149,13 +152,17 @@ def generar_clases():
 
                 completed.append(video_file)
                 save_completed_videos(completed)
-                progress_data["progress"] = i
+
+                processed_videos += 1
+                progress_data["progress"] = processed_videos / total_videos * 100  # 👈 porcentaje real
 
             except Exception as e:
                 progress_data["message"] = f"Error procesando {video_file}: {e}"
 
+        # === Al finalizar ===
         progress_data.update({
             "status": "done",
+            "progress": 100,  # 👈 fuerza barra al 100%
             "message": f"Se han creado {len(progress_data['created_classes'])} clases.",
         })
 
