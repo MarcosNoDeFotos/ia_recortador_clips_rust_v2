@@ -1,0 +1,5 @@
+{
+    "file_name": "serverConfig.json (Nombre del archivo para ser reconocido)",
+    "host": "127.0.0.1",
+    "port": 5000
+}

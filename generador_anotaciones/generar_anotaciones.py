@@ -25,11 +25,11 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def seleccionar_video(queue):
     root = tk.Tk()
     root.withdraw()
-    video_path = filedialog.askopenfilename(
+    video_paths = filedialog.askopenfilenames(
         title="Seleccionar vídeo",
         filetypes=[("Archivos de vídeo", "*.mp4;*.mov;*.avi;*.mkv")]
     )
-    queue.put(video_path)
+    queue.put(video_paths)
 
 
 def sec_to_hhmmss(seconds):
@@ -228,13 +228,14 @@ def agregar_video():
     p = Process(target=seleccionar_video, args=(queue,))
     p.start()
     p.join()
-    selected_path = queue.get()
-    if not selected_path:
+    selected_paths = queue.get()
+    if not selected_paths:
         return jsonify({"success": False, "error": "No se seleccionó ningún vídeo"})
 
     # Mover el vídeo a la carpeta
-    dest = os.path.join(VIDEOS_DIR, os.path.basename(selected_path))
-    shutil.move(selected_path, dest)
+    for selected_path in selected_paths:
+        dest = os.path.join(VIDEOS_DIR, os.path.basename(selected_path))
+        shutil.move(selected_path, dest)
     return jsonify({"success": True})
 
 
