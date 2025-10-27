@@ -134,14 +134,15 @@ def generar_clases():
 
                     cmd = [
                         "ffmpeg",
+                        "-i", video_path,                     # input después de -i para precisión
                         "-ss", str(start),
                         "-to", str(end),
-                        "-i", video_path,
-                        "-map", "0",
-                        "-c", "copy",
-                        "-avoid_negative_ts", "1",
-                        "-fflags", "+genpts",
-                        "-reset_timestamps", "1",
+                        "-accurate_seek",                     # precisión total
+                        "-an",                                # eliminar audio
+                        "-c:v", "libx264",                    # codec compatible
+                        "-crf", "0",                          # CRF=0 => lossless (sin pérdida)
+                        "-preset", "ultrafast",               # velocidad de compresión alta (sin afectar calidad)
+                        "-pix_fmt", "yuv420p",                # formato compatible y estándar
                         "-y",
                         clip_path
                     ]
