@@ -495,6 +495,13 @@
             endInput.dataset.sec = eSec;
         }
 
+        function restartMarkers() {
+            markerStartPct = 0
+            markerEndPct = 100
+            video.currentTime = 0;
+            updateMarkers()
+        }
+
         // ==== Botones de ajuste 1s ====
         startDecBtn.onclick = () => {
             let s = parseFloat(startInput.dataset.sec);
@@ -801,6 +808,7 @@
 
         let currentVideoName = null;
         var anotacionesVideoActual = [];
+
         async function seleccionarVideoModal(nombreVideo) {
             currentVideoName = nombreVideo; // Guardar nombre actual
             cerrarModal();
@@ -823,6 +831,7 @@
 
             showToast("Vídeo cargado correctamente", "#27ae60");
             document.getElementById("saveButton").style.display = ""
+            restartMarkers();
         }
 
         async function cargarAnotacionesVideoActual() {
