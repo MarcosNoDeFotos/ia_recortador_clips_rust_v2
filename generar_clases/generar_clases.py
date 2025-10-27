@@ -117,6 +117,8 @@ def generar_clases():
                     label = ann.get("label")
                     start = ann.get("start")
                     end = ann.get("end")
+                    start_str = ann.get("start_str").replace(":", "-")
+                    end_str = ann.get("end_str").replace(":", "-")
 
                     if not label or start is None or end is None:
                         continue
@@ -124,7 +126,7 @@ def generar_clases():
                     class_dir = os.path.join(DATASET_DIR, label)
                     os.makedirs(class_dir, exist_ok=True)
 
-                    clip_name = f"{os.path.splitext(video_file)[0]}_{int(start)}_{int(end)}.mp4"
+                    clip_name = f"{os.path.splitext(video_file)[0]}_{start_str}_{end_str}.mp4"
                     clip_path = os.path.join(class_dir, clip_name)
 
                     cmd = [
