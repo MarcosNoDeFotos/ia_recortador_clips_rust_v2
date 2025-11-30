@@ -38,7 +38,15 @@ data = joblib.load(MODEL_PATH)
 clf, classes = data["clf"], data["classes"]
 
 with open(ACTIONS_JSON, "r", encoding="utf-8") as f:
-    ACTIONS_MAP = json.load(f)
+    raw_actions = json.load(f)
+
+# Expandir a formato compatible con la lógica actual
+ACTIONS_MAP = {}
+EQUIVALENT_CLASSES = {}
+
+for cls, info in raw_actions.items():
+    ACTIONS_MAP[cls] = info.get("frases", [])
+    EQUIVALENT_CLASSES[cls] = info.get("similares", [])
 
 
 MASK_REGIONS = [
@@ -75,6 +83,13 @@ def get_frame_embedding(frame):
         feats = model.get_image_features(**inputs)
     feats = normalize(feats.cpu().numpy())
     return feats[0]
+
+def resolve_equivalent_class(cls):
+    """Si la clase pertenece a un grupo equivalente, devolver la clase principal"""
+    for main, similars in EQUIVALENT_CLASSES.items():
+        if cls == main or cls in similars:
+            return main
+    return cls
 
 
 def parse_duration_from_prompt(prompt):
@@ -165,6 +180,7 @@ def read_cached_frames_streaming(cache_dir, batch_size=200):
 def generar_clips(video_path, prompt, threshold=0.25):
     clip_duration = parse_duration_from_prompt(prompt)
     cls, score, phrase = find_most_similar_class(prompt)
+    cls = resolve_equivalent_class(cls)
     if not cls:
         return []
 
@@ -246,8 +262,22 @@ def generar_clips(video_path, prompt, threshold=0.25):
         progress_est = 85 + round((i / max(1, total_segments)) * 15, 1)
         log_progress(f"🎞️ Generando clip {i+1}/{total_segments} → {name}", progress=progress_est)
 
-        cmd = ["ffmpeg", "-y", "-ss", str(clip_start), "-i", video_path,
-               "-t", str(clip_duration), "-map", "0", "-c", "copy", output_path]
+        # cmd = ["ffmpeg", "-y", "-ss", str(clip_start), "-i", video_path,
+        #        "-t", str(clip_duration), "-map", "0", "-c", "copy", output_path]
+        cmd = [
+            "ffmpeg",
+            "-accurate_seek",                     # precisión total
+            "-ss", str(clip_start),
+            "-t", str(clip_duration),
+            "-i", video_path,                     # input después de -i para precisión
+            "-map", "0", # Copia todas las pistas de vídeo y audio
+            "-c", "copy", # Copia sin recodificar ni cambiar la calidad
+            "-avoid_negative_ts", "1", # corrige timestamps negativos
+            "-fflags", "+genpts", # recalcula los PTS (Presentation Timestamps) del vídeo
+            "-reset_timestamps", "1", # fuerza que todos los streams comiencen en 0
+            "-y",
+            output_path
+        ]
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         clips.append({"nombre": name, "prompt": prompt})
 
