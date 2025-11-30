@@ -7,6 +7,6 @@
 *.pkl
 *.log
 __pycache__/
-
+*.lnk
 
 !serverConfig_template.json
