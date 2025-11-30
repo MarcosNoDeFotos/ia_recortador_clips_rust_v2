@@ -39,7 +39,7 @@ def sec_to_hhmmss(seconds):
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def get_most_common_labels(max_labels=15):
+def get_most_common_labels(max_labels=50):
     labels = []
 
     # 1️⃣ Extraer labels de los JSON de anotaciones
