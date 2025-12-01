@@ -3,13 +3,15 @@ import json
 import re
 import cv2
 import torch
+import sqlite3
 import numpy as np
-from flask import Blueprint, render_template, request, jsonify, send_from_directory, make_response
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, make_response, url_for
 from sklearn.preprocessing import normalize
 from transformers import CLIPProcessor, CLIPModel
 import joblib
 import subprocess
-from multiprocessing import  Process, Queue
+from datetime import datetime
+from multiprocessing import Process, Queue
 import tkinter as tk
 from tkinter import filedialog
 
@@ -23,14 +25,14 @@ VIDEOS_INPUT_DIR = CURRENT_PATH + "../videos_entrada/"
 OUTPUT_DIR = CURRENT_PATH + "../clips_generados/"
 PROGRESS_FILE = os.path.join(OUTPUT_DIR, "progreso_generar_clips.json")
 FRAMES_CACHE_DIR = os.path.join(OUTPUT_DIR, "frames_cache")
-
+DB_PATH = CURRENT_PATH + "../database.db"
 os.makedirs(VIDEOS_INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(FRAMES_CACHE_DIR, exist_ok=True)
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# === CARGAR MODELO ===
+# === CARGAR MODELO CLIP+SVM ===
 print(f"🔹 Cargando modelo CLIP ({DEVICE}) y clasificador SVM...")
 model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", weights_only=False).to(DEVICE)
 processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
@@ -43,11 +45,15 @@ with open(ACTIONS_JSON, "r", encoding="utf-8") as f:
 # Expandir a formato compatible con la lógica actual
 ACTIONS_MAP = {}
 EQUIVALENT_CLASSES = {}
-
 for cls, info in raw_actions.items():
-    ACTIONS_MAP[cls] = info.get("frases", [])
-    EQUIVALENT_CLASSES[cls] = info.get("similares", [])
-
+    # flexible: support either list directly or dict with "frases" / "similares"
+    if isinstance(info, dict):
+        ACTIONS_MAP[cls] = info.get("frases", [])
+        EQUIVALENT_CLASSES[cls] = info.get("similares", [])
+    else:
+        # legacy: if value is list of phrases
+        ACTIONS_MAP[cls] = info
+        EQUIVALENT_CLASSES[cls] = []
 
 MASK_REGIONS = [
     {"x_ratio": 0.01, "y_ratio": 0.48, "width_ratio": 0.25, "height_ratio": 0.25},
@@ -55,6 +61,22 @@ MASK_REGIONS = [
     {"x_ratio": 0.31, "y_ratio": 0.0, "width_ratio": 0.39, "height_ratio": 0.04},
     {"x_ratio": 0.0, "y_ratio": 0.95, "width_ratio": 0.1, "height_ratio": 0.05},
 ]
+
+
+# def ensure_clips_table_columns():
+#     """Asegura que la tabla clips tenga columnas generated_path y generated_at"""
+#     with sqlite3.connect(DB_PATH) as db:
+#         cur = db.cursor()
+#         cur.execute("PRAGMA table_info(clips)")
+#         cols = [r[1] for r in cur.fetchall()]
+#         if "generated_path" not in cols:
+#             cur.execute("ALTER TABLE clips ADD COLUMN generated_path TEXT")
+#         if "generated_at" not in cols:
+#             cur.execute("ALTER TABLE clips ADD COLUMN generated_at TIMESTAMP")
+#         db.commit()
+
+
+# ensure_clips_table_columns()
 
 
 def log_progress(message, done=False, progress=None):
@@ -83,6 +105,7 @@ def get_frame_embedding(frame):
         feats = model.get_image_features(**inputs)
     feats = normalize(feats.cpu().numpy())
     return feats[0]
+
 
 def resolve_equivalent_class(cls):
     """Si la clase pertenece a un grupo equivalente, devolver la clase principal"""
@@ -117,7 +140,7 @@ def find_most_similar_class(prompt, min_similarity=0.25):
         prompt_feat = model.get_text_features(**prompt_inputs)
     prompt_feat = prompt_feat / prompt_feat.norm(p=2, dim=-1, keepdim=True)
     sims = (prompt_feat @ text_feats.T).cpu().numpy()[0]
-    idx = np.argmax(sims)
+    idx = int(np.argmax(sims))
     cls = lookup[idx]
     phrase = text_list[idx]
     score = float(sims[idx])
@@ -135,7 +158,7 @@ def extract_frames_streaming(video_path, fps=1, batch_size=200):
     cap = cv2.VideoCapture(video_path)
     fps_video = cap.get(cv2.CAP_PROP_FPS)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    step = max(1, int(fps_video // fps))
+    step = max(1, int(fps_video // fps)) if fps_video > 0 else 1
     batch_frames, batch_times = [], []
 
     for i in range(0, total, step):
@@ -146,7 +169,7 @@ def extract_frames_streaming(video_path, fps=1, batch_size=200):
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame = mask_face_region(frame)
-        t = i / fps_video
+        t = i / fps_video if fps_video > 0 else 0.0
 
         np.save(os.path.join(cache_dir, f"{i:08d}.npy"), np.array([frame, t], dtype=object))
         batch_frames.append(frame)
@@ -178,6 +201,7 @@ def read_cached_frames_streaming(cache_dir, batch_size=200):
 
 
 def generar_clips(video_path, prompt, threshold=0.25):
+    """Detecta segmentos y los guarda en la tabla clips (no genera .mp4 todavía)."""
     clip_duration = parse_duration_from_prompt(prompt)
     cls, score, phrase = find_most_similar_class(prompt)
     cls = resolve_equivalent_class(cls)
@@ -194,17 +218,14 @@ def generar_clips(video_path, prompt, threshold=0.25):
 
     cap = cv2.VideoCapture(video_path)
     fps_video = cap.get(cv2.CAP_PROP_FPS)
-    frame_count_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if fps_video and fps_video>0 else 0
     cap.release()
-    
-    step = max(1, int(fps_video // 1))  # fps de extracción
-    total_frames = max(1, frame_count_video // step)
+
+    step = max(1, int(fps_video // 1)) if fps_video and fps_video>0 else 1
+    total_frames = max(1, frame_count_video // step) if frame_count_video>0 else 1
 
     use_cache = any(f.endswith(".npy") for f in os.listdir(cache_dir))
-    frame_stream = (
-        read_cached_frames_streaming(cache_dir)
-        if use_cache else extract_frames_streaming(video_path)
-    )
+    frame_stream = read_cached_frames_streaming(cache_dir) if use_cache else extract_frames_streaming(video_path)
 
     timestamps, target_probs = [], []
     frame_counter = 0
@@ -221,7 +242,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
         target_probs.extend(probs)
         frame_counter += len(batch_frames)
 
-        percent = min(100, round((frame_counter / total_frames) * 100, 1))
+        percent = min(99, round((frame_counter / total_frames) * 100, 1))
         log_progress(f"⏱️ Procesados {frame_counter}/{total_frames} frames ({percent}%)", progress=percent)
 
         del batch_frames, batch_times, feats, probs
@@ -238,7 +259,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
             segment_probs.append(prob)
         elif prob <= threshold and start is not None:
             end = timestamps[i]
-            avg_prob = np.mean(segment_probs)
+            avg_prob = float(np.mean(segment_probs))
             if end - start >= clip_duration / 6:
                 segments.append((start, end, avg_prob))
             start = None
@@ -246,71 +267,48 @@ def generar_clips(video_path, prompt, threshold=0.25):
 
     if start and segment_probs:
         end = timestamps[-1]
-        avg_prob = np.mean(segment_probs)
+        avg_prob = float(np.mean(segment_probs))
         if end - start >= clip_duration / 6:
             segments.append((start, end, avg_prob))
 
-    # === Generar clips ===
+    # === Guardar segmentos detectados en DB ===
     total_segments = len(segments)
-    clips = []
-    for i, (start, end, avg) in enumerate(segments):
-        mid = (start + end) / 2
-        clip_start = max(0, mid - clip_duration / 2)
-        name = f"{os.path.splitext(os.path.basename(video_path))[0]}_{cls}_{i+1}_{round(avg,3)}.mp4"
-        output_path = os.path.join(OUTPUT_DIR, name)
+    with sqlite3.connect(DB_PATH) as db:
+        for i, (start, end, avg) in enumerate(segments):
+            try:
+                mid = (start + end) / 2
+                clip_start = max(0, mid - clip_duration / 2)
+                # guardamos start como clip_start y duracion en "end" (compatible con antes)
+                # Nota: aquí mantenemos "start" (segundos) y "end" (duración) como antes del diseño original
+                db.execute(
+                    "INSERT INTO clips(video_name, start, end, fecha_generacion, accuracy, prompt) values (?, ?, ?, ?, ?, ?)",
+                    (video_path, clip_start, clip_duration, None, round(float(avg), 3), prompt)
+                )
+            except Exception as e:
+                print("Error guardando segmento en DB:", e)
+        db.commit()
 
-        progress_est = 85 + round((i / max(1, total_segments)) * 15, 1)
-        log_progress(f"🎞️ Generando clip {i+1}/{total_segments} → {name}", progress=progress_est)
-
-        # cmd = ["ffmpeg", "-y", "-ss", str(clip_start), "-i", video_path,
-        #        "-t", str(clip_duration), "-map", "0", "-c", "copy", output_path]
-        cmd = [
-            "ffmpeg",
-            "-accurate_seek",                     # precisión total
-            "-ss", str(clip_start),
-            "-t", str(clip_duration),
-            "-i", video_path,                     # input después de -i para precisión
-            "-map", "0", # Copia todas las pistas de vídeo y audio
-            "-c", "copy", # Copia sin recodificar ni cambiar la calidad
-            "-avoid_negative_ts", "1", # corrige timestamps negativos
-            "-fflags", "+genpts", # recalcula los PTS (Presentation Timestamps) del vídeo
-            "-reset_timestamps", "1", # fuerza que todos los streams comiencen en 0
-            "-y",
-            output_path
-        ]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        clips.append({"nombre": name, "prompt": prompt})
-
-    log_progress(f"✅ {len(clips)} clips generados desde {os.path.basename(video_path)}", done=True, progress=100)
-    return clips
+    log_progress(f"✅ {total_segments} clips detectados", done=True, progress=100)
+    return segments
 
 
 def proceso_generar(prompt, videos):
-    all_clips = []
     log_progress("🚀 Iniciando generación de clips...", progress=0)
     for idx, v in enumerate(videos):
         vpath = os.path.join(VIDEOS_INPUT_DIR, v)
         if os.path.exists(vpath):
             log_progress(f"▶️ Procesando video {idx+1}/{len(videos)}: {v}")
-            clips = generar_clips(vpath, prompt)
-            all_clips.extend(clips)
+            generar_clips(vpath, prompt)
     log_progress("✅ Proceso completado.", done=True, progress=100)
 
-    log_file = os.path.join(OUTPUT_DIR, "clips_generados.json")
-    try:
-        existing = []
-        if os.path.exists(log_file):
-            existing = json.load(open(log_file, "r", encoding="utf-8"))
-        existing.extend(all_clips)
-        json.dump(existing, open(log_file, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-    except Exception as e:
-        print("Error guardando clips_generados.json:", e)
+
 def detectar_clase_test(prompt):
     cls, score, _ = find_most_similar_class(prompt)
     if not cls:
         cls = "none :("
         score = 0
-    return cls, round(score,3)
+    return cls, round(score, 3)
+
 
 def seleccionar_videos(queue):
     root = tk.Tk()
@@ -318,10 +316,31 @@ def seleccionar_videos(queue):
     paths = filedialog.askopenfilenames(title="Seleccionar vídeos", filetypes=[("Vídeos", "*.mp4;*.mov;*.avi;*.mkv")])
     queue.put(paths)
 
+
+def get_clips_detectados(min_accuracy=0.0):
+    clips = []
+    with sqlite3.connect(DB_PATH) as db:
+        rows = db.execute("SELECT id, video_name, start, end, fecha_generacion, accuracy, prompt, generated_path, generated_at from clips WHERE accuracy >= ? ORDER BY prompt, accuracy DESC", (min_accuracy,)).fetchall()
+        for row in rows:
+            clips.append({
+                "id": row[0],
+                "video_name": row[1],
+                "start": row[2],
+                "end": row[3],
+                "fecha_generacion": row[4],
+                "accuracy": row[5],
+                "prompt": row[6],
+                "generated_path": row[7],
+                "generated_at": row[8],
+            })
+    return clips
+
+
 # === RUTAS WEB ===
 @app.route('/')
 def index():
     return render_template('generar_clips_index.html')
+
 
 @app.route('/agregar_videos', methods=['GET'])
 def agregar_videos():
@@ -337,21 +356,29 @@ def agregar_videos():
         shutil.move(pth, os.path.join(VIDEOS_INPUT_DIR, os.path.basename(pth)))
     return jsonify({"success": True})
 
+
 @app.route('/listar_videos')
 def listar_videos():
     vids = [f for f in os.listdir(VIDEOS_INPUT_DIR) if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv"))]
     return jsonify(vids)
 
 
+@app.route('/video_original')
+def video_original():
+    """Serve original videos from videos_entrada (safe basename)"""
+    video = request.args.get("video")
+    if not video:
+        return "No video", 400
+    safe = os.path.basename(video)
+    if not os.path.exists(os.path.join(VIDEOS_INPUT_DIR, safe)):
+        return "Not found", 404
+    return send_from_directory(VIDEOS_INPUT_DIR, safe)
+
+
 @app.route('/listar_clips')
 def listar_clips():
-    clips_json = os.path.join(OUTPUT_DIR, "clips_generados.json")
-    if os.path.exists(clips_json):
-        with open(clips_json, "r", encoding="utf-8") as f:
-            clips = json.load(f)
-    else:
-        clips = []
-    return jsonify(clips)
+    min_acc = float(request.args.get("min_accuracy", 0.0))
+    return jsonify(get_clips_detectados(min_accuracy=min_acc))
 
 
 @app.route('/video/<path:filename>')
@@ -369,11 +396,12 @@ def generar():
     p = Process(target=proceso_generar, args=(prompt, videos))
     p.start()
     return jsonify({"success": True})
+
+
 @app.route('/detectar_clase', methods=['POST'])
 def detectar_clase():
     data = request.get_json()
     prompt = data.get("prompt", "")
-
     clase, similaridad = detectar_clase_test(prompt)
     return jsonify({"success": True, "clase": clase, "similaridad": similaridad})
 
@@ -387,3 +415,70 @@ def progreso():
             resp = make_response(jsonify(json.load(f)))
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
+
+
+@app.route('/generar_clip', methods=['POST'])
+def generar_clip():
+    """
+    Genera el clip .mp4 para el segmento dado.
+    POST JSON: { "clip_id": int, "start": float, "end": float, "reencode": bool (optional) }
+    """
+    data = request.get_json()
+    clip_id = int(data.get("clip_id"))
+    start = float(data.get("start"))
+    end = float(data.get("end"))
+    reencode = bool(data.get("reencode", True))  # por defecto True para precisión
+
+    # Buscar clip en DB
+    with sqlite3.connect(DB_PATH) as db:
+        row = db.execute("SELECT id, video_name FROM clips WHERE id = ?", (clip_id,)).fetchone()
+        if not row:
+            return jsonify({"success": False, "error": "Clip no encontrado"}), 404
+        video_path = row[1]
+
+    basename_out = f"{os.path.splitext(os.path.basename(video_path))[0]}_clip_{clip_id}_{int(start)}_{int(end)}.mp4"
+    output_path = os.path.join(OUTPUT_DIR, basename_out)
+
+    # Construir comando ffmpeg
+    # Para precisión y que no haya pérdida visible usamos recodificación de vídeo con crf bajo y -an (sin audio)
+    # Usamos "-i input -ss START -to END" para seek preciso con recodificación.
+    try:
+        if reencode:
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", video_path,
+                "-ss", str(start),
+                "-to", str(end),
+                "-an",
+                "-c:v", "libx264",
+                "-crf", "18",
+                "-preset", "veryfast",
+                output_path
+            ]
+        else:
+            # Método de copia (rápido) — puede no ser exacto en borde de frames
+            duration = end - start
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", str(start),
+                "-i", video_path,
+                "-t", str(duration),
+                "-c", "copy",
+                "-avoid_negative_ts", "1",
+                "-fflags", "+genpts",
+                output_path
+            ]
+
+        log_progress(f"🎬 Generando clip {basename_out} ...")
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # Guardar generated_path y timestamp en DB
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute("UPDATE clips SET generated_path = ?, generated_at = ? WHERE id = ?", (basename_out, datetime.now(), clip_id))
+            db.commit()
+
+        log_progress(f"✅ Clip generado: {basename_out}", done=True, progress=100)
+        # Devolver ruta relativa que puede abrirse con /generar_clips/video/<filename>
+        return jsonify({"success": True, "generated": basename_out, "url": url_for("generar_clips.video_file", filename=basename_out)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

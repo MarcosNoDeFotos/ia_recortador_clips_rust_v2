@@ -34,7 +34,10 @@ def init_db():
                     start DECIMAL,
                     end DECIMAL,
                     fecha_generacion TIMESTAMP,
-                    prompt TEXT
+                    accuracy DECIMAL,
+                    prompt TEXT,
+                    generated_path TEXT,
+                    generated_at TIMESTAMP
                 )
             """)
             conn.commit()

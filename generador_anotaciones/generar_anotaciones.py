@@ -59,36 +59,11 @@ def get_most_common_labels(max_labels=50):
         rows = db.execute("SELECT DISTINCT label FROM anotaciones").fetchall()
         for row in rows:
             labels.append(row[0])
-
-    # 1️⃣ Extraer labels de los JSON de anotaciones
-    # for f in os.listdir(OUTPUT_DIR):
-    #     if f.endswith("_annotations.json"):
-    #         try:
-    #             with open(os.path.join(OUTPUT_DIR, f), "r", encoding="utf-8") as jf:
-    #                 data = json.load(jf)
-    #                 for a in data:
-    #                     if isinstance(a, dict) and "label" in a and a["label"]:
-    #                         labels.append(a["label"])
-    #         except Exception:
-    #             pass
-    
-    # Contar las labels más comunes
-    # counter = Counter(labels)
-    # most_common = [label for label, _ in counter.most_common(max_labels)]
-
-    # 2️⃣ Añadir nombres de clases que hay en la carpeta dataset/
     if os.path.exists(DATASET_DIR):
         for cls in os.listdir(DATASET_DIR):
             if os.path.isdir(os.path.join(DATASET_DIR, cls)) and cls not in labels:
                 labels.append(cls)
     labels.sort()
-    # 3️⃣ Eliminar duplicados manteniendo el orden
-    # seen = set()
-    # final_labels = []
-    # for label in most_common:
-    #     if label not in seen:
-    #         final_labels.append(label)
-    #         seen.add(label)
 
     return labels
 
@@ -120,18 +95,7 @@ def abrir_video():
         return jsonify({"error": "No se seleccionó ningún archivo"}), 400
 
     videoPath = selected_path
-    # base_name = os.path.basename(videoPath)
     annotations = get_anotaciones_video(videoPath)
-    # annotation_file = os.path.join(OUTPUT_DIR, f"{base_name}_annotations.json")
-
-    # if os.path.exists(annotation_file):
-    #     try:
-    #         with open(annotation_file, "r", encoding="utf-8") as f:
-    #             annotations = json.load(f)
-    #     except Exception as e:
-    #         print(f"⚠️ Error al leer anotaciones previas: {e}")
-    
-
 
     tags = get_most_common_labels()
 
@@ -170,12 +134,6 @@ def save_annotations():
     annotations = data.get("annotations", [])
     annotations = [a for a in annotations if a.get("label")]
 
-    # base_name = os.path.basename(videoPath)
-    # output_file = os.path.join(OUTPUT_DIR, f"{base_name}_annotations.json")
-
-    # with open(output_file, "w", encoding="utf-8") as f:
-    #     json.dump(annotations, f, indent=2, ensure_ascii=False)
-
     video_full_path = os.path.join(videos_origen_dir, videoPath)
     with sqlite3.connect(DB_PATH) as db:
         for anotacion in annotations:
@@ -200,27 +158,6 @@ def eliminar_anotacion():
     annotations = get_anotaciones_video(video_file)
     return jsonify({"status": "ok", "annotations": annotations})
 
-    # annotations_path = os.path.join(OUTPUT_DIR, f"{video_file}_annotations.json")
-    # if not os.path.exists(annotations_path):
-    #     return jsonify({"status": "error", "message": "Archivo no encontrado"})
-
-    # try:
-    #     with open(annotations_path, "r", encoding="utf-8") as f:
-    #         annotations = json.load(f)
-
-    #     if 0 <= index < len(annotations):
-    #         annotations.pop(index)
-    #         with open(annotations_path, "w", encoding="utf-8") as f:
-    #             json.dump(annotations, f, indent=2, ensure_ascii=False)
-    #         return jsonify({"status": "ok", "annotations": annotations})
-    #     else:
-    #         return jsonify({"status": "error", "message": "Índice fuera de rango"})
-    # except Exception as e:
-    #     return jsonify({"status": "error", "message": str(e)})
-
-
-
-
 @app.route("/listar_videos")
 def listar_videos():
     videos = [f for f in os.listdir(videos_origen_dir) if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv"))]
@@ -237,15 +174,6 @@ def abrir_video_modal():
         return jsonify({"error": "Vídeo no encontrado"}), 404
     videoPath = video_path
 
-    # base_name = os.path.basename(videoPath)
-    # annotation_file = os.path.join(OUTPUT_DIR, f"{base_name}_annotations.json")
-    # annotations = []
-    # if os.path.exists(annotation_file):
-    #     try:
-    #         with open(annotation_file, "r", encoding="utf-8") as f:
-    #             annotations = json.load(f)
-    #     except:
-    #         pass
     annotations = get_anotaciones_video(videoPath)
     tags = get_most_common_labels()
     return jsonify({"video_url": f"/anotaciones/video?video={video_name}&ts={int(time.time())}", "annotations": annotations, "tags": tags})
@@ -256,14 +184,7 @@ def get_annotation_count():
     if not video_name:
         return jsonify({"count": 0})
     video_name = os.path.join(videos_origen_dir, video_name)
-    # annotation_file = os.path.join(OUTPUT_DIR, f"{video_name}_annotations.json")
-    # if os.path.exists(annotation_file):
-    #     try:
-    #         with open(annotation_file, "r", encoding="utf-8") as f:
-    #             data = json.load(f)
-    #             return jsonify({"count": len(data)})
-    #     except:
-    #         return jsonify({"count": 0})
+
     annotations = 0
     with sqlite3.connect(DB_PATH) as db:
         anotacionesDB = db.execute("SELECT count(*) from anotaciones where video_name = ?", (video_name,)).fetchone()
