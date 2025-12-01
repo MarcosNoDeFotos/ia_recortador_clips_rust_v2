@@ -1,5 +1,6 @@
 from flask import Flask, render_template
 import os
+import sqlite3
 import json
 if __name__ == "__main__": 
     print("Cargando apps...")
@@ -10,6 +11,34 @@ if __name__ == "__main__":
     print("Apps cargadas")
 
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
+
+
+def init_db():
+    with sqlite3.connect(CURRENT_PATH+"database.db") as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS anotaciones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_name TEXT,
+                    start DECIMAL,
+                    end DECIMAL,
+                    start_str TEXT,
+                    end_str TEXT,
+                    label TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS clips (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_name TEXT,
+                    start DECIMAL,
+                    end DECIMAL,
+                    fecha_generacion TIMESTAMP,
+                    prompt TEXT
+                )
+            """)
+            conn.commit()
+
 
 def create_app():
     app = Flask(__name__)
@@ -28,6 +57,7 @@ def create_app():
     return app
 
 if __name__ == "__main__":
+    init_db()
     app = create_app()
     host= "127.0.0.1"
     port = 5000

@@ -85,11 +85,6 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        .completed {
-            color: #4caf50;
-            font-weight: bold;
-        }
-
         .theme-toggle {
             position: fixed;
             bottom: 15px;
@@ -178,7 +173,6 @@
     <ul id="videoList"></ul>
 
     <button class="btn" onclick="iniciarGeneracion()">Generar Clases</button>
-    <button class="btn btn-danger" onclick="reiniciarEstado()">🔄 Reiniciar estado</button>
     <button class="theme-toggle" onclick="toggleTheme()">🌓 Cambiar tema</button>
 
     <div id="modal" class="modal">
@@ -208,8 +202,7 @@
             list.innerHTML = "";
             data.forEach(v => {
                 const li = document.createElement("li");
-                li.innerHTML = `<span>${v.video}</span> <span>${v.annotations} anotaciones ${v.completed ? "✅" : ""}</span>`;
-                if (v.completed) li.classList.add("completed");
+                li.innerHTML = `<span>${v.video}</span> <span>${v.annotations} anotaciones</span>`;
                 list.appendChild(li);
             });
         }
@@ -252,12 +245,6 @@
             }
         }
 
-        async function reiniciarEstado() {
-            if (!confirm("¿Seguro que quieres reiniciar el estado? Se volverán a procesar todos los vídeos.")) return;
-            await fetch("/generar_clases/reiniciar_estado", { method: "POST" });
-            alert("Estado reiniciado correctamente.");
-            cargarVideos();
-        }
 
         function cerrarModal() {
             modal.style.display = "none";

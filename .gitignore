@@ -8,5 +8,5 @@
 *.log
 __pycache__/
 *.lnk
-
+*.db
 !serverConfig_template.json

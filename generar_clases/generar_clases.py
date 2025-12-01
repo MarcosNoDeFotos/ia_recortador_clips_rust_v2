@@ -2,14 +2,14 @@ import os
 import json
 import subprocess
 import threading
+import sqlite3
 from flask import Flask, jsonify, render_template, request, Blueprint
 
 app = Blueprint("generar_clases", __name__, template_folder="templates")
 
 # === CONFIGURACIÓN DE RUTAS ===
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
-VIDEOS_DIR = os.path.join(CURRENT_PATH, "../videos_para_anotar/")
-ANNOTATIONS_DIR = os.path.join(CURRENT_PATH, "../anotaciones/")
+DB_PATH = CURRENT_PATH + "../database.db"
 DATASET_DIR = os.path.join(CURRENT_PATH, "../dataset/")
 COMPLETED_FILE = os.path.join(CURRENT_PATH, "videos_completados.json")
 
@@ -24,23 +24,6 @@ progress_data = {
     "created_classes": {}
 }
 
-
-# === FUNCIONES AUXILIARES ===
-def load_completed_videos():
-    if os.path.exists(COMPLETED_FILE):
-        try:
-            with open(COMPLETED_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
-
-
-def save_completed_videos(completed):
-    with open(COMPLETED_FILE, "w", encoding="utf-8") as f:
-        json.dump(completed, f, indent=2, ensure_ascii=False)
-
-
 # === ENDPOINT PRINCIPAL (HTML) ===
 @app.route("/")
 def generar_clases_index():
@@ -50,24 +33,15 @@ def generar_clases_index():
 # === LISTAR VÍDEOS Y SUS ANOTACIONES ===
 @app.route("/listar_videos")
 def listar_videos():
-    completed = load_completed_videos()
     videos = []
-    for file in os.listdir(VIDEOS_DIR):
-        if not file.lower().endswith((".mp4", ".mov", ".avi", ".mkv")):
-            continue
-        ann_path = os.path.join(ANNOTATIONS_DIR, f"{file}_annotations.json")
-        annotations = 0
-        if os.path.exists(ann_path):
-            try:
-                with open(ann_path, "r", encoding="utf-8") as f:
-                    annotations = len(json.load(f))
-            except Exception:
-                pass
-        videos.append({
-            "video": file,
-            "annotations": annotations,
-            "completed": file in completed
-        })
+   
+    with sqlite3.connect(DB_PATH) as db:
+        rows = db.execute("SELECT video_name, count(*) as cantidad from anotaciones group by video_name").fetchall()
+        for row in rows: 
+            videos.append({
+                "video": row[0],
+                "annotations": row[1]
+            })
     return jsonify(videos)
 
 
@@ -82,56 +56,55 @@ def generar_clases():
             "created_classes": {}
         })
 
-        completed = load_completed_videos()
-        video_files = [f for f in os.listdir(VIDEOS_DIR) if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv"))]
-        pendientes = [v for v in video_files if v not in completed]
-        total_videos = len(pendientes)
-        progress_data["total"] = total_videos
+        # video_files = [f for f in os.listdir(VIDEOS_DIR) if f.lower().endswith((".mp4", ".mov", ".avi", ".mkv"))]
+        anotaciones_crear = []
+        with sqlite3.connect(DB_PATH) as db:
+            rows = db.execute("SELECT id, start, end, start_str, end_str, label, video_name from anotaciones order by video_name, start").fetchall()
+            for row in rows:
+                anotaciones_crear.append({
+                    "id": row[0],
+                    "start": row[1],
+                    "end": row[2],
+                    "start_str": row[3],
+                    "end_str": row[4],
+                    "label": row[5],
+                    "video_name" : row[6]
+                })
+        # pendientes = [v for v in video_files if v not in completed]
+        # total_videos = len(pendientes)
+        progress_data["total"] = anotaciones_crear.__len__()
 
-        if total_videos == 0:
-            progress_data.update({
-                "status": "done",
-                "message": "No hay vídeos nuevos para procesar.",
-                "created_classes": {}
-            })
-            return
+        # if total_videos == 0:
+        #     progress_data.update({
+        #         "status": "done",
+        #         "message": "No hay vídeos nuevos para procesar.",
+        #         "created_classes": {}
+        #     })
+        #     return
 
-        processed_videos = 0  # 👈 contador de vídeos realmente procesados
+        processed_videos = 0  
 
-        for i, video_file in enumerate(pendientes, 1):
+        for i, anotacion_data in enumerate(anotaciones_crear, 1):
             try:
-                progress_data["message"] = f"Procesando vídeo {i}/{total_videos}: {video_file}"
-                video_path = os.path.join(VIDEOS_DIR, video_file)
-                annotation_path = os.path.join(ANNOTATIONS_DIR, f"{video_file}_annotations.json")
-
-                if not os.path.exists(annotation_path):
-                    progress_data["message"] = f"No hay anotaciones para {video_file}, se omite."
-                    continue
-
-                with open(annotation_path, "r", encoding="utf-8") as f:
-                    annotations = json.load(f)
-
-                if not annotations:
-                    progress_data["message"] = f"Sin anotaciones en {video_file}, se omite."
-                    continue
-
+                video_path = anotacion_data["video_name"]
+                progress_data["message"] = f"Procesando vídeo {i}/{anotaciones_crear.__len__()}: {video_path}"
                 # === Si llega aquí, sí se procesa el vídeo ===
-                for ann in annotations:
-                    label = ann.get("label")
-                    start = ann.get("start")
-                    end = ann.get("end")
-                    start_str = ann.get("start_str", "").replace(":", "-")
-                    end_str = ann.get("end_str", "").replace(":", "-")
+                label = anotacion_data["label"]
+                start = anotacion_data["start"]
+                end = anotacion_data["end"]
+                start_str = anotacion_data["start_str"].replace(":", "-")
+                end_str = anotacion_data["end_str"].replace(":", "-")
 
-                    if not label or start is None or end is None:
-                        continue
+                if not label or start is None or end is None:
+                    continue
 
-                    class_dir = os.path.join(DATASET_DIR, label)
-                    os.makedirs(class_dir, exist_ok=True)
+                class_dir = os.path.join(DATASET_DIR, label)
+                os.makedirs(class_dir, exist_ok=True)
 
-                    clip_name = f"{os.path.splitext(video_file)[0]}_{start_str}_{end_str}.mp4"
-                    clip_path = os.path.join(class_dir, clip_name)
-
+                clip_name = f"{os.path.basename(video_path)}_{start_str}_{end_str}.mp4"
+                clip_path = os.path.join(class_dir, clip_name)
+                print("Salida: "+clip_path)
+                if not os.path.exists(clip_path):
                     cmd = [
                         "ffmpeg",
                         "-accurate_seek",                     # precisión total
@@ -146,15 +119,12 @@ def generar_clases():
 
                     progress_data["created_classes"].setdefault(label, 0)
                     progress_data["created_classes"][label] += 1
-
-                completed.append(video_file)
-                save_completed_videos(completed)
-
                 processed_videos += 1
                 progress_data["progress"] = processed_videos
 
             except Exception as e:
-                progress_data["message"] = f"Error procesando {video_file}: {e}"
+                progress_data["message"] = f"Error procesando {anotacion_data}: {e}"
+                print(e)
 
         # === Al finalizar ===
         progress_data.update({
@@ -171,10 +141,3 @@ def generar_clases():
 @app.route("/progreso")
 def progreso():
     return jsonify(progress_data)
-
-
-# === REINICIAR ESTADO ===
-@app.route("/reiniciar_estado", methods=["POST"])
-def reiniciar_estado():
-    save_completed_videos([])
-    return jsonify({"status": "ok", "message": "Estado reiniciado. Todos los vídeos podrán procesarse de nuevo."})
