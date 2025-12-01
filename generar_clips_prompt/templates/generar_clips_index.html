@@ -59,6 +59,7 @@
             align-items: center;
             justify-content: center;
             z-index: 50;
+            overflow-y: auto;
         }
 
         .modal.active {
@@ -71,8 +72,9 @@
             padding: 20px;
             border-radius: 10px;
             width: 95%;
-            max-width: 1000px;
+            max-width: 1200px;
             color: var(--text-color);
+            margin: 20px auto;
         }
 
         .clip-row {
@@ -85,11 +87,11 @@
         }
 
         .clip-row:hover {
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
         }
 
         .badge {
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
             padding: 4px 8px;
             border-radius: 6px;
             font-size: 0.9rem;
@@ -101,10 +103,205 @@
         }
 
         .filter-row {
-            display:flex;
-            align-items:center;
-            gap:8px;
-            margin-bottom:8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        /* Video player container */
+        .video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        #modalVideo {
+            width: 100%;
+            max-width: 640px;
+            border-radius: 8px;
+            background: black;
+        }
+
+        .timeline-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            height: 10px;
+            background: #444;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .progress-fill-top {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            background: #7378ff;
+            border-radius: 5px;
+        }
+
+        .scrub-handle {
+            position: absolute;
+            top: -4px;
+            width: 12px;
+            height: 18px;
+            background: #2a2aff;
+            border-radius: 4px;
+            transform: translateX(-50%);
+            cursor: pointer;
+        }
+
+        .timeline-bottom {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            height: 14px;
+            background: #555;
+            border-radius: 7px;
+            margin-top: 12px;
+        }
+
+        .marker {
+            position: absolute;
+            top: -3px;
+            width: 8px;
+            height: 20px;
+            border-radius: 3px;
+            transform: translateX(-50%);
+            cursor: ew-resize;
+        }
+
+        #markerStart {
+            background: #0078d7;
+        }
+
+        #markerEnd {
+            background: #e63946;
+        }
+
+        .selection-range {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background: rgba(115, 120, 255, 0.4);
+            border-radius: 5px;
+        }
+
+        .btn-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+            max-width: 640px;
+        }
+
+        .btn-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-row input {
+            width: 100px;
+            text-align: center;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-color);
+        }
+
+        .btn-row button {
+            background: #FFB74D;
+            color: black;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+
+        .btn-row button:hover {
+            opacity: 0.8;
+        }
+
+        .speed-control-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .speed-control-row button {
+            background: #6C63FF;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: bold;
+        }
+
+        .speed-control-row button:hover {
+            opacity: 0.8;
+        }
+
+        .speed-display {
+            color: var(--text-color);
+            font-weight: bold;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .segment-adjust-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .noselect {
+            user-select: none;
+        }
+
+        .edit-section {
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .edit-section {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.4s, bottom 0.4s;
+        }
+
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
         }
     </style>
 </head>
@@ -153,27 +350,56 @@
                 <button id="closeModalBtn" class="bg-blue-600 px-3 py-1 rounded">Cerrar</button>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <video id="modalVideo" controls style="width:100%; background: black"></video>
-                    <div class="flex items-center gap-3 mt-2">
-                        <button id="setStartBtn" class="bg-yellow-500 px-2 py-1 rounded">Set start = current</button>
-                        <button id="setEndBtn" class="bg-yellow-500 px-2 py-1 rounded">Set end = current</button>
-                        <span class="small ml-2" id="currentTime">00:00:00.00</span>
-                    </div>
+            <!-- Video container with timeline controls -->
+            <div class="video-container">
+                <video id="modalVideo" controls></video>
+
+                <!-- Timeline superior (scrub) -->
+                <div class="timeline-container" id="timelineTop">
+                    <div class="progress-fill-top" id="progressFillTop"></div>
+                    <div class="scrub-handle" id="scrubHandle"></div>
                 </div>
 
+                <!-- Timeline inferior con markers -->
+                <div class="timeline-bottom" id="timelineBottom">
+                    <div class="selection-range" id="selectionRange"></div>
+                    <div class="marker" id="markerStart"></div>
+                    <div class="marker" id="markerEnd"></div>
+                </div>
+
+                <!-- Botones de control de velocidad -->
+                <div class="speed-control-row">
+                    <button id="speedResetBtn" title="Reiniciar velocidad a x1">x1</button>
+                    <span class="speed-display" id="speedDisplay">x1</span>
+                    <button id="speedIncBtn" title="Aumentar velocidad">x2</button>
+                </div>
+
+                <!-- Botones de control de segmento -->
+                <div class="btn-container" style="align-items: flex-end;">
+                    <div class="btn-row">
+                        <label class="small">Inicio:</label>
+                        <input id="inputStart" type="text" readonly>
+                        <button id="startDec" title="Restar 1s">⬅️</button>
+                        <button id="startInc" title="Sumar 1s">➡️</button>
+                    </div>
+                    <div class="btn-row">
+                        <label class="small">Fin:</label>
+                        <input id="inputEnd" type="text" readonly>
+                        <button id="endDec" title="Restar 1s">⬅️</button>
+                        <button id="endInc" title="Sumar 1s">➡️</button>
+                    </div>
+                    <div class="btn-row segment-adjust-buttons">
+                        <button id="segmentDec" title="Mover segmento 1s atrás">⬅️ Segmento atrás</button>
+                        <button id="segmentInc" title="Mover segmento 1s adelante">Segmento adelante ➡️</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit section -->
+            <div class="edit-section">
                 <div>
-                    <label class="small">Start (s)</label>
-                    <input id="inputStart" type="number" step="0.01" class="w-full p-2 rounded bg-gray-900 text-white">
-                    <label class="small mt-2">End (s)</label>
-                    <input id="inputEnd" type="number" step="0.01" class="w-full p-2 rounded bg-gray-900 text-white">
-                    <div class="mt-3 flex gap-2">
+                    <div class="mt-3 flex gap-2" style="justify-content: flex-end;">
                         <button id="generateClipBtn" class="bg-green-600 px-4 py-2 rounded">Generar clip</button>
-                        <select id="reencodeOpt" class="p-2 rounded bg-gray-900">
-                            <option value="true" selected>Recodificar (preciso)</option>
-                            <option value="false">Copiar (rápido, menos preciso)</option>
-                        </select>
                     </div>
                     <div id="genResult" class="mt-3 small"></div>
                 </div>
@@ -186,6 +412,16 @@
     <script>
         let clipsCache = [];
         let currentClip = null;
+        let videoDuration = 0;
+        let markerStartPct = 0;
+        let markerEndPct = 100;
+        let scrubbing = false;
+        let draggingMarker = null;
+        let draggingRange = false;
+        let dragOffset = 0;
+        let wasPlayingBeforeDrag = false;
+        let shiftPressed = false;
+        let controlPressed = false;
 
         async function loadVideos() {
             const res = await fetch('/generar_clips/listar_videos');
@@ -235,11 +471,12 @@
                     row.className = 'clip-row';
                     const left = document.createElement('div');
                     left.innerHTML = `<div><a href="#" class="text-blue-300">${it.video_name.split('/').pop()}</a></div>
-                                      <div class="small">start: ${it.start.toFixed(2)}s • dur: ${it.end.toFixed(2)}s</div>`;
+                                      <div class="small">Inicio: ${formatTime(it.start)} • Fin: ${formatTime(it.start + it.end)}</div>`;
                     const right = document.createElement('div');
-                    right.innerHTML = `<span class="badge">acc ${it.accuracy.toFixed(3)}</span>
+                    right.innerHTML = `<button class="bg-red-600 px-3 py-1 rounded ml-2" onclick='deleteClip(${it.id})'>🗑️ Eliminar</button>
                                        <button class="bg-blue-600 px-3 py-1 rounded ml-2" onclick='openClipModal(${it.id})'>Ver / Editar</button>
-                                       ${it.generated_path ? `<a class="ml-2 small text-green-400" href="/generar_clips/video/${it.generated_path}" target="_blank">Ver generado</a>` : ''}`;
+                                       ${it.generated_path ? `<a class="ml-2 small text-green-400" href="/generar_clips/video/${it.generated_path}" target="_blank">Ver generado</a>` : ''}
+                                       <span class="badge">acc ${it.accuracy.toFixed(3)}</span>`;
                     row.appendChild(left);
                     row.appendChild(right);
                     section.appendChild(row);
@@ -255,6 +492,19 @@
             toast.style.background = color;
             toast.className = "toast show";
             setTimeout(() => { toast.className = "toast"; }, 2500);
+        }
+
+        function clamp(v, min, max) { 
+            return Math.min(Math.max(v, min), max); 
+        }
+
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00:00.00";
+            const h = Math.floor(sec / 3600).toString().padStart(2, "0");
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
+            const s = Math.floor(sec % 60).toString().padStart(2, "0");
+            const ms = Math.floor((sec % 1) * 100).toString().padStart(2, "0");
+            return `${h}:${m}:${s}.${ms}`;
         }
 
         // actualizar valor visual del range
@@ -314,45 +564,303 @@
         const modalVideo = document.getElementById('modalVideo');
         const inputStart = document.getElementById('inputStart');
         const inputEnd = document.getElementById('inputEnd');
-        const currentTimeSpan = document.getElementById('currentTime');
-        const setStartBtn = document.getElementById('setStartBtn');
-        const setEndBtn = document.getElementById('setEndBtn');
         const generateClipBtn = document.getElementById('generateClipBtn');
         const genResult = document.getElementById('genResult');
-        const reencodeOpt = document.getElementById('reencodeOpt');
 
-        modalVideo.addEventListener('timeupdate', () => {
-            const t = modalVideo.currentTime;
-            currentTimeSpan.textContent = secondsToHmsMs(t);
+        const timelineTop = document.getElementById('timelineTop');
+        const timelineBottom = document.getElementById('timelineBottom');
+        const scrubHandle = document.getElementById('scrubHandle');
+        const progressFillTop = document.getElementById('progressFillTop');
+        const markerStart = document.getElementById('markerStart');
+        const markerEnd = document.getElementById('markerEnd');
+        const selectionRange = document.getElementById('selectionRange');
+
+        const startDecBtn = document.getElementById('startDec');
+        const startIncBtn = document.getElementById('startInc');
+        const endDecBtn = document.getElementById('endDec');
+        const endIncBtn = document.getElementById('endInc');
+        const segmentDecBtn = document.getElementById('segmentDec');
+        const segmentIncBtn = document.getElementById('segmentInc');
+
+        const speedResetBtn = document.getElementById('speedResetBtn');
+        const speedIncBtn = document.getElementById('speedIncBtn');
+        const speedDisplay = document.getElementById('speedDisplay');
+
+        let currentPlaybackRate = 1;
+
+        document.addEventListener('keydown', e => {
+            if (e.key === "Shift" && !shiftPressed) { shiftPressed = true; }
+            if (e.key === "Control" && !controlPressed) { controlPressed = true; }
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key === "Shift") { shiftPressed = false; }
+            if (e.key === "Control") { controlPressed = false; }
         });
 
-        function secondsToHmsMs(sec) {
-            if (isNaN(sec)) return "00:00:00.00";
-            const h = Math.floor(sec / 3600).toString().padStart(2, "0");
-            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
-            const s = Math.floor(sec % 60).toString().padStart(2, "0");
-            const ms = Math.floor((sec % 1) * 100).toString().padStart(2, "0");
-            return `${h}:${m}:${s}.${ms}`;
+        modalVideo.onloadedmetadata = () => {
+            videoDuration = modalVideo.duration;
+            updateMarkers();
+        };
+
+        modalVideo.ontimeupdate = () => {
+            if (!videoDuration) return;
+            const current = modalVideo.currentTime;
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((current - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+            scrubHandle.style.left = normPct + "%";
+
+            if (current >= endTime) {
+                modalVideo.currentTime = startTime;
+                modalVideo.play();
+            }
+        };
+
+        // Control de velocidad de reproducción
+        speedResetBtn.addEventListener('click', () => {
+            currentPlaybackRate = 1;
+            modalVideo.playbackRate = currentPlaybackRate;
+            speedDisplay.textContent = 'x' + currentPlaybackRate;
+            speedIncBtn.textContent = 'x2';
+        });
+
+        speedIncBtn.addEventListener('click', () => {
+            currentPlaybackRate += 1;
+            if (currentPlaybackRate > 10) currentPlaybackRate = 2; // Reiniciar desde x2 si supera x10
+            modalVideo.playbackRate = currentPlaybackRate;
+            speedDisplay.textContent = 'x' + currentPlaybackRate;
+            speedIncBtn.textContent = 'x' + (currentPlaybackRate + 1 > 10 ? 2 : currentPlaybackRate + 1);
+        });
+
+        function updateMarkers() {
+            markerStart.style.left = markerStartPct + "%";
+            markerEnd.style.left = markerEndPct + "%";
+            selectionRange.style.left = markerStartPct + "%";
+            selectionRange.style.width = (markerEndPct - markerStartPct) + "%";
+            const sSec = (markerStartPct / 100) * videoDuration;
+            const eSec = (markerEndPct / 100) * videoDuration;
+            inputStart.value = formatTime(sSec);
+            inputEnd.value = formatTime(eSec);
+            inputStart.dataset.sec = sSec;
+            inputEnd.dataset.sec = eSec;
         }
+
+        function restartMarkers() {
+            markerStartPct = 0;
+            markerEndPct = 100;
+            modalVideo.currentTime = 0;
+            updateMarkers();
+        }
+
+        // Botones de ajuste de inicio
+        startDecBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s - timeToChange, 0, parseFloat(inputEnd.dataset.sec) - 0.1);
+            inputStart.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+        startIncBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s + timeToChange, 0, parseFloat(inputEnd.dataset.sec) - 0.1);
+            inputStart.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        // Botones de ajuste de fin
+        endDecBtn.onclick = () => {
+            let e = parseFloat(inputEnd.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e - timeToChange, parseFloat(inputStart.dataset.sec) + 0.1, videoDuration);
+            inputEnd.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(inputStart.dataset.sec);
+            modalVideo.currentTime = Math.max(e - 3, s);
+            modalVideo.play();
+        };
+        endIncBtn.onclick = () => {
+            let e = parseFloat(inputEnd.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e + timeToChange, parseFloat(inputStart.dataset.sec) + 0.1, videoDuration);
+            inputEnd.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(inputStart.dataset.sec);
+            modalVideo.currentTime = Math.max(e - 3, s);
+            modalVideo.play();
+        };
+
+        // Botones de movimiento de segmento
+        segmentDecBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            let e = parseFloat(inputEnd.dataset.sec);
+            const duration = e - s;
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s - timeToChange, 0, videoDuration - duration);
+            e = s + duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        segmentIncBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            let e = parseFloat(inputEnd.dataset.sec);
+            const duration = e - s;
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e + timeToChange, duration, videoDuration);
+            s = e - duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        // Timeline scrubbing
+        timelineTop.addEventListener("pointerdown", ev => {
+            scrubbing = true;
+            wasPlayingBeforeDrag = !modalVideo.paused;
+            if (wasPlayingBeforeDrag) modalVideo.pause();
+            timelineTop.setPointerCapture(ev.pointerId);
+            handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointermove", ev => {
+            if (scrubbing) handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointerup", ev => {
+            if (scrubbing) {
+                scrubbing = false;
+                timelineTop.releasePointerCapture(ev.pointerId);
+                modalVideo.play();
+            }
+        });
+
+        function handleScrub(ev) {
+            const rect = timelineTop.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const clamped = clamp(pct, markerStartPct, markerEndPct);
+            const newTime = (clamped / 100) * videoDuration;
+            modalVideo.currentTime = newTime;
+
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((newTime - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+
+            scrubHandle.style.left = normPct + "%";
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+        }
+
+        // Markers dragging
+        markerStart.addEventListener("pointerdown", ev => {
+            draggingMarker = "start";
+            document.body.classList.add("noselect");
+            markerStart.setPointerCapture(ev.pointerId);
+        });
+        markerEnd.addEventListener("pointerdown", ev => {
+            draggingMarker = "end";
+            document.body.classList.add("noselect");
+            markerEnd.setPointerCapture(ev.pointerId);
+        });
+        markerStart.addEventListener("pointermove", ev => handleMarkerDrag(ev, "start"));
+        markerEnd.addEventListener("pointermove", ev => handleMarkerDrag(ev, "end"));
+        markerStart.addEventListener("pointerup", ev => handleMarkerRelease(ev, "start"));
+        markerEnd.addEventListener("pointerup", ev => handleMarkerRelease(ev, "end"));
+
+        function handleMarkerDrag(ev, which) {
+            if (draggingMarker !== which) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const gap = 0.1;
+            if (which === "start") {
+                markerStartPct = clamp(pct, 0, markerEndPct - gap);
+            } else {
+                markerEndPct = clamp(pct, markerStartPct + gap, 100);
+            }
+            updateMarkers();
+        }
+
+        function handleMarkerRelease(ev, which) {
+            if (draggingMarker !== which) return;
+            ev.target.releasePointerCapture(ev.pointerId);
+            document.body.classList.remove("noselect");
+            if (which === "start") {
+                modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
+                modalVideo.play();
+            } else {
+                const s = parseFloat(inputStart.dataset.sec);
+                const e = parseFloat(inputEnd.dataset.sec);
+                modalVideo.currentTime = Math.max(e - 3, s);
+                modalVideo.play();
+            }
+            draggingMarker = null;
+        }
+
+        // Selection range dragging
+        selectionRange.addEventListener("pointerdown", ev => {
+            draggingRange = true;
+            document.body.classList.add("noselect");
+            selectionRange.setPointerCapture(ev.pointerId);
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            dragOffset = x - (markerStartPct / 100) * rect.width;
+        });
+        selectionRange.addEventListener("pointermove", ev => {
+            if (!draggingRange) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left - dragOffset, 0, rect.width);
+            const rangeWidth = ((markerEndPct - markerStartPct) / 100) * rect.width;
+            let newStart = (x / rect.width) * 100;
+            let newEnd = ((x + rangeWidth) / rect.width) * 100;
+            const shift = newEnd > 100 ? newEnd - 100 : newStart < 0 ? newStart : 0;
+            markerStartPct = clamp(newStart - shift, 0, 100);
+            markerEndPct = clamp(newEnd - shift, 0, 100);
+            updateMarkers();
+        });
+        selectionRange.addEventListener("pointerup", ev => {
+            if (!draggingRange) return;
+            selectionRange.releasePointerCapture(ev.pointerId);
+            draggingRange = false;
+            document.body.classList.remove("noselect");
+            modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
+            modalVideo.play();
+        });
 
         async function openClipModal(id) {
             const clip = clipsCache.find(c => c.id === id);
             if (!clip) return showToast("Segmento no encontrado", "#c0392b");
             currentClip = clip;
-            // abrir modal
             clipModal.classList.add('active');
             genResult.innerHTML = '';
-            // set video src to original video route
             const video_basename = clip.video_name.split('/').pop();
             modalVideo.src = `/generar_clips/video_original?video=${encodeURIComponent(video_basename)}`;
             modalVideo.currentTime = clip.start || 0;
-            inputStart.value = (clip.start || 0).toFixed(2);
-            // end was stored as duration previously; the DB 'end' holds clip duration in many places
-            inputEnd.value = ((clip.start || 0) + (clip.end || 0)).toFixed(2);
-
-            // wait a bit and seek
-            setTimeout(()=> {
-                modalVideo.currentTime = parseFloat(inputStart.value);
+            
+            setTimeout(() => {
+                restartMarkers();
+                inputStart.dataset.sec = clip.start || 0;
+                markerStartPct = (inputStart.dataset.sec / videoDuration) * 100;
+                const endTime = (clip.start || 0) + (clip.end || 0);
+                inputEnd.dataset.sec = endTime;
+                markerEndPct = (inputEnd.dataset.sec / videoDuration) * 100;
+                updateMarkers();
+                modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
             }, 200);
         }
 
@@ -362,17 +870,10 @@
             modalVideo.src = "";
         });
 
-        setStartBtn.addEventListener('click', () => {
-            inputStart.value = modalVideo.currentTime.toFixed(2);
-        });
-        setEndBtn.addEventListener('click', () => {
-            inputEnd.value = modalVideo.currentTime.toFixed(2);
-        });
-
         generateClipBtn.addEventListener('click', async () => {
             if (!currentClip) return;
-            const start = parseFloat(inputStart.value);
-            const end = parseFloat(inputEnd.value);
+            const start = parseFloat(inputStart.dataset.sec);
+            const end = parseFloat(inputEnd.dataset.sec);
             if (isNaN(start) || isNaN(end) || end <= start) return alert("Start/end inválidos");
 
             generateClipBtn.disabled = true;
@@ -384,8 +885,7 @@
                 body: JSON.stringify({
                     clip_id: currentClip.id,
                     start: start,
-                    end: end,
-                    reencode: reencodeOpt.value === "true"
+                    end: end
                 })
             });
             const data = await res.json();
@@ -393,13 +893,27 @@
             if (data.success) {
                 genResult.innerHTML = `Generado: <a href="${data.url}" target="_blank">${data.generated}</a>`;
                 showToast("Clip generado correctamente", "#025902");
-                // refrescar listado
                 loadClips();
             } else {
                 genResult.innerText = "Error: " + (data.error || "unknown");
                 showToast("Error generando clip", "#c0392b");
             }
         });
+
+        async function deleteClip(id) {
+            const res = await fetch('/generar_clips/eliminar_clip', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ clip_id: id })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast("Clip eliminado correctamente", "#025902");
+                loadClips();
+            } else {
+                showToast("Error eliminando clip: " + (data.error || "unknown"), "#c0392b");
+            }
+        }
 
         // init
         loadVideos();

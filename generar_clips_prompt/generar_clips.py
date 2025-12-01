@@ -421,13 +421,12 @@ def progreso():
 def generar_clip():
     """
     Genera el clip .mp4 para el segmento dado.
-    POST JSON: { "clip_id": int, "start": float, "end": float, "reencode": bool (optional) }
+    POST JSON: { "clip_id": int, "start": float, "end": float }
     """
     data = request.get_json()
     clip_id = int(data.get("clip_id"))
     start = float(data.get("start"))
     end = float(data.get("end"))
-    reencode = bool(data.get("reencode", True))  # por defecto True para precisión
 
     # Buscar clip en DB
     with sqlite3.connect(DB_PATH) as db:
@@ -443,31 +442,22 @@ def generar_clip():
     # Para precisión y que no haya pérdida visible usamos recodificación de vídeo con crf bajo y -an (sin audio)
     # Usamos "-i input -ss START -to END" para seek preciso con recodificación.
     try:
-        if reencode:
-            cmd = [
-                "ffmpeg", "-y",
-                "-i", video_path,
-                "-ss", str(start),
-                "-to", str(end),
-                "-an",
-                "-c:v", "libx264",
-                "-crf", "18",
-                "-preset", "veryfast",
-                output_path
-            ]
-        else:
-            # Método de copia (rápido) — puede no ser exacto en borde de frames
-            duration = end - start
-            cmd = [
-                "ffmpeg", "-y",
-                "-ss", str(start),
-                "-i", video_path,
-                "-t", str(duration),
-                "-c", "copy",
-                "-avoid_negative_ts", "1",
-                "-fflags", "+genpts",
-                output_path
-            ]
+        duration = end - start
+        cmd = [
+            "ffmpeg",
+            "-accurate_seek",                     # precisión total
+            "-ss", str(start),
+            "-t", str(duration),
+            "-i", video_path,                     # input después de -i para precisión
+            "-map", "0", # Copia todas las pistas de vídeo y audio
+            "-c", "copy", # Copia sin recodificar ni cambiar la calidad
+            "-avoid_negative_ts", "1", # corrige timestamps negativos
+            "-fflags", "+genpts", # recalcula los PTS (Presentation Timestamps) del vídeo
+            "-reset_timestamps", "1", # fuerza que todos los streams comiencen en 0
+            "-y",
+            output_path
+        ]
+            
 
         log_progress(f"🎬 Generando clip {basename_out} ...")
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -480,5 +470,23 @@ def generar_clip():
         log_progress(f"✅ Clip generado: {basename_out}", done=True, progress=100)
         # Devolver ruta relativa que puede abrirse con /generar_clips/video/<filename>
         return jsonify({"success": True, "generated": basename_out, "url": url_for("generar_clips.video_file", filename=basename_out)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/eliminar_clip', methods=['POST'])
+def eliminar_clip():
+    """
+    Elimina un clip de la tabla clips por su ID.
+    POST JSON: { "clip_id": int }
+    """
+    data = request.get_json()
+    clip_id = int(data.get("clip_id"))
+    
+    try:
+        with sqlite3.connect(DB_PATH) as db:
+            db.execute("DELETE FROM clips WHERE id = ?", (clip_id,))
+            db.commit()
+        return jsonify({"success": True})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
