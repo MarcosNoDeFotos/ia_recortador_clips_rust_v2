@@ -1,19 +1,13 @@
 import os
 import json
 import re
-import cv2
-import torch
 import sqlite3
-import numpy as np
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, make_response, url_for
-from sklearn.preprocessing import normalize
-from transformers import CLIPProcessor, CLIPModel
-import joblib
-import subprocess
 from datetime import datetime
 from multiprocessing import Process, Queue
 import tkinter as tk
 from tkinter import filedialog
+import subprocess
 
 # === CONFIG ===
 app = Blueprint("generar_clips", __name__, template_folder="templates")
@@ -30,31 +24,6 @@ os.makedirs(VIDEOS_INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(FRAMES_CACHE_DIR, exist_ok=True)
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# === CARGAR MODELO CLIP+SVM ===
-print(f"🔹 Cargando modelo CLIP ({DEVICE}) y clasificador SVM...")
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", weights_only=False).to(DEVICE)
-processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-data = joblib.load(MODEL_PATH)
-clf, classes = data["clf"], data["classes"]
-
-with open(ACTIONS_JSON, "r", encoding="utf-8") as f:
-    raw_actions = json.load(f)
-
-# Expandir a formato compatible con la lógica actual
-ACTIONS_MAP = {}
-EQUIVALENT_CLASSES = {}
-for cls, info in raw_actions.items():
-    # flexible: support either list directly or dict with "frases" / "similares"
-    if isinstance(info, dict):
-        ACTIONS_MAP[cls] = info.get("frases", [])
-        EQUIVALENT_CLASSES[cls] = info.get("similares", [])
-    else:
-        # legacy: if value is list of phrases
-        ACTIONS_MAP[cls] = info
-        EQUIVALENT_CLASSES[cls] = []
-
 MASK_REGIONS = [
     {"x_ratio": 0.01, "y_ratio": 0.48, "width_ratio": 0.25, "height_ratio": 0.25},
     {"x_ratio": 0.844, "y_ratio": 0.87, "width_ratio": 0.5, "height_ratio": 0.5},
@@ -62,30 +31,43 @@ MASK_REGIONS = [
     {"x_ratio": 0.0, "y_ratio": 0.95, "width_ratio": 0.1, "height_ratio": 0.05},
 ]
 
-
-# def ensure_clips_table_columns():
-#     """Asegura que la tabla clips tenga columnas generated_path y generated_at"""
-#     with sqlite3.connect(DB_PATH) as db:
-#         cur = db.cursor()
-#         cur.execute("PRAGMA table_info(clips)")
-#         cols = [r[1] for r in cur.fetchall()]
-#         if "generated_path" not in cols:
-#             cur.execute("ALTER TABLE clips ADD COLUMN generated_path TEXT")
-#         if "generated_at" not in cols:
-#             cur.execute("ALTER TABLE clips ADD COLUMN generated_at TIMESTAMP")
-#         db.commit()
-
-
-# ensure_clips_table_columns()
-
+progress_data = {"log": "Esperando inicio...", "done": False, "progress": 0}
 
 def log_progress(message, done=False, progress=None):
-    """Escribe progreso en archivo JSON para que el frontend lo lea en tiempo real"""
-    progress_data = {"log": message, "done": done}
+    global progress_data
+    progress_data["log"] = message
+    progress_data["done"] = done
     if progress is not None:
         progress_data["progress"] = progress
-    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
-        json.dump(progress_data, f, ensure_ascii=False, indent=2)
+
+
+def get_clip_model_and_processor():
+    import torch
+    from transformers import CLIPProcessor, CLIPModel
+    import joblib
+    from sklearn.preprocessing import normalize
+
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", weights_only=False).to(DEVICE)
+    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    data = joblib.load(MODEL_PATH)
+    clf, classes = data["clf"], data["classes"]
+    return model, processor, clf, classes, DEVICE, normalize
+
+
+def get_actions_map_and_equivalents():
+    with open(ACTIONS_JSON, "r", encoding="utf-8") as f:
+        raw_actions = json.load(f)
+    actions_map = {}
+    equivalent_classes = {}
+    for cls, info in raw_actions.items():
+        if isinstance(info, dict):
+            actions_map[cls] = info.get("frases", [])
+            equivalent_classes[cls] = info.get("similares", [])
+        else:
+            actions_map[cls] = info
+            equivalent_classes[cls] = []
+    return actions_map, equivalent_classes
 
 
 def mask_face_region(frame):
@@ -99,7 +81,8 @@ def mask_face_region(frame):
     return frame
 
 
-def get_frame_embedding(frame):
+def get_frame_embedding(frame, processor, model, DEVICE, normalize):
+    import torch
     inputs = processor(images=[frame], return_tensors="pt", padding=True).to(DEVICE)
     with torch.no_grad():
         feats = model.get_image_features(**inputs)
@@ -107,9 +90,8 @@ def get_frame_embedding(frame):
     return feats[0]
 
 
-def resolve_equivalent_class(cls):
-    """Si la clase pertenece a un grupo equivalente, devolver la clase principal"""
-    for main, similars in EQUIVALENT_CLASSES.items():
+def resolve_equivalent_class(cls, equivalent_classes):
+    for main, similars in equivalent_classes.items():
         if cls == main or cls in similars:
             return main
     return cls
@@ -125,9 +107,11 @@ def parse_duration_from_prompt(prompt):
     return int(val * 60) if unit.startswith("min") else int(val)
 
 
-def find_most_similar_class(prompt, min_similarity=0.25):
+def find_most_similar_class(prompt, processor, model, actions_map, min_similarity=0.25, DEVICE=None):
+    import torch
+    import numpy as np
     text_list, lookup = [], []
-    for cls, phrases in ACTIONS_MAP.items():
+    for cls, phrases in actions_map.items():
         for p in phrases:
             text_list.append(p)
             lookup.append(cls)
@@ -150,7 +134,8 @@ def find_most_similar_class(prompt, min_similarity=0.25):
 
 
 def extract_frames_streaming(video_path, fps=1, batch_size=200):
-    """Extrae frames en streaming, guarda en caché y rinde por lotes."""
+    import cv2
+    import numpy as np
     name = os.path.splitext(os.path.basename(video_path))[0]
     cache_dir = os.path.join(FRAMES_CACHE_DIR, name)
     os.makedirs(cache_dir, exist_ok=True)
@@ -186,7 +171,7 @@ def extract_frames_streaming(video_path, fps=1, batch_size=200):
 
 
 def read_cached_frames_streaming(cache_dir, batch_size=200):
-    """Lee frames del caché en streaming por lotes."""
+    import numpy as np
     cached = sorted([f for f in os.listdir(cache_dir) if f.endswith(".npy")])
     batch_frames, batch_times = [], []
     for f in cached:
@@ -200,11 +185,21 @@ def read_cached_frames_streaming(cache_dir, batch_size=200):
         yield batch_frames, batch_times
 
 
+def log_progress(message, done=False, progress=None):
+    global progress_data
+    progress_data["log"] = message
+    progress_data["done"] = done
+    if progress is not None:
+        progress_data["progress"] = progress
+
+
 def generar_clips(video_path, prompt, threshold=0.25):
-    """Detecta segmentos y los guarda en la tabla clips (no genera .mp4 todavía)."""
+    import numpy as np
+    model, processor, clf, classes, DEVICE, normalize = get_clip_model_and_processor()
+    actions_map, equivalent_classes = get_actions_map_and_equivalents()
     clip_duration = parse_duration_from_prompt(prompt)
-    cls, score, phrase = find_most_similar_class(prompt)
-    cls = resolve_equivalent_class(cls)
+    cls, score, phrase = find_most_similar_class(prompt, processor, model, actions_map, DEVICE=DEVICE)
+    cls = resolve_equivalent_class(cls, equivalent_classes)
     if not cls:
         return []
 
@@ -216,6 +211,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
     cache_dir = os.path.join(FRAMES_CACHE_DIR, name)
     os.makedirs(cache_dir, exist_ok=True)
 
+    import cv2
     cap = cv2.VideoCapture(video_path)
     fps_video = cap.get(cv2.CAP_PROP_FPS)
     frame_count_video = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) if fps_video and fps_video>0 else 0
@@ -232,6 +228,7 @@ def generar_clips(video_path, prompt, threshold=0.25):
 
     # === Análisis de frames ===
     for batch_frames, batch_times in frame_stream:
+        import torch
         with torch.no_grad():
             inputs = processor(images=batch_frames, return_tensors="pt", padding=True).to(DEVICE)
             feats = model.get_image_features(**inputs)
@@ -303,7 +300,9 @@ def proceso_generar(prompt, videos):
 
 
 def detectar_clase_test(prompt):
-    cls, score, _ = find_most_similar_class(prompt)
+    model, processor, clf, classes, DEVICE, normalize = get_clip_model_and_processor()
+    actions_map, equivalent_classes = get_actions_map_and_equivalents()
+    cls, score, _ = find_most_similar_class(prompt, processor, model, actions_map, DEVICE=DEVICE)
     if not cls:
         cls = "none :("
         score = 0
@@ -408,13 +407,8 @@ def detectar_clase():
 
 @app.route('/progreso')
 def progreso():
-    if not os.path.exists(PROGRESS_FILE):
-        resp = make_response(jsonify({"log": "Esperando inicio...", "done": False}))
-    else:
-        with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
-            resp = make_response(jsonify(json.load(f)))
-    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return resp
+    # Solo lee la variable global, no el archivo
+    return make_response(jsonify(progress_data))
 
 
 @app.route('/generar_clip', methods=['POST'])
@@ -457,7 +451,6 @@ def generar_clip():
             "-y",
             output_path
         ]
-            
 
         log_progress(f"🎬 Generando clip {basename_out} ...")
         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
