@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Captura Directa - Momentos Clave</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #121212;
+            --fg: #e0e0e0;
+            --card-bg: #1e1e1e;
+            --border-color: #333;
+            --text-color: #e0e0e0;
+        }
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: sans-serif;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-color);
+            padding: 12px 0;
+            margin-bottom: 20px;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+        .toast {
+            visibility: hidden;
+            min-width: 250px;
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            border-radius: 8px;
+            padding: 12px;
+            position: fixed;
+            z-index: 1;
+            left: 50%;
+            bottom: 30px;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.4s, bottom 0.4s;
+        }
+        .toast.show {
+            visibility: visible;
+            opacity: 1;
+            bottom: 50px;
+        }
+        #camSelect{
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        #camSelect div{
+            display: flex;
+        }
+        #camSelect div label{
+            display: inline-flex;
+            flex-direction: row;
+            flex-wrap: nowrap;
+            justify-content: center;
+            align-items: center;
+        }
+        #camSelect div label img{
+            width: 60px;
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>Captura Directa - Momentos Clave</h1>
+    </header>
+    <div class="max-w-3xl mx-auto space-y-6 px-4">
+        <div class="mb-4">
+            <label class="block mb-1">Ruta de grabaciones</label>
+            <input id="grabacionesDir" type="text" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600" value="G:/videos">
+        </div>
+        <div class="mb-4">
+            <label class="block mb-1">Selecciona cámara</label>
+            <!-- <select id="camSelect" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600"></select> -->
+            <div id="camSelect" class="w-full px-3 py-2 rounded bg-gray-800 border border-gray-600">Cargando dispositivos...</div>
+        </div>
+        <div class="mb-4">
+            <button id="capturaBtn" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg w-full">Capturar momentos clave en directo</button>
+        </div>
+        <div class="mb-4">
+            <h2 class="text-xl mb-2">📋 Momentos clave detectados</h2>
+            <div id="segmentosContainer" class="space-y-3 bg-gray-800 p-4 rounded-lg"></div>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <!-- Modal de edición/generación de clip -->
+    <div id="clipModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center;">
+        <div id="clipModalContent" style="background:#222; color:#fff; padding:30px 40px; border-radius:12px; min-width:320px; max-width:95vw;">
+            <div class="flex justify-between items-center mb-3">
+                <h3 id="modalTitle">Editar segmento</h3>
+                <button id="closeModalBtn" class="bg-blue-600 px-3 py-1 rounded">Cerrar</button>
+            </div>
+            <div class="video-container" style="display:flex; flex-direction:column; align-items:center; gap:15px;">
+                <video id="modalVideo" controls style="width:100%; max-width:640px; border-radius:8px; background:black;"></video>
+                <div class="timeline-container" id="timelineTop" style="position:relative; width:100%; max-width:640px; height:10px; background:#444; border-radius:5px; margin-top:10px;">
+                    <div class="progress-fill-top" id="progressFillTop" style="position:absolute; top:0; bottom:0; background:#7378ff; border-radius:5px;"></div>
+                    <div class="scrub-handle" id="scrubHandle" style="position:absolute; top:-4px; width:12px; height:18px; background:#2a2aff; border-radius:4px; transform:translateX(-50%); cursor:pointer;"></div>
+                </div>
+                <div class="timeline-bottom" id="timelineBottom" style="position:relative; width:100%; max-width:640px; height:14px; background:#555; border-radius:7px; margin-top:12px;">
+                    <div class="selection-range" id="selectionRange" style="position:absolute; top:0; height:100%; background:rgba(115,120,255,0.4); border-radius:5px;"></div>
+                    <div class="marker" id="markerStart" style="position:absolute; top:-3px; width:8px; height:20px; border-radius:3px; background:#0078d7; transform:translateX(-50%); cursor:ew-resize;"></div>
+                    <div class="marker" id="markerEnd" style="position:absolute; top:-3px; width:8px; height:20px; border-radius:3px; background:#e63946; transform:translateX(-50%); cursor:ew-resize;"></div>
+                </div>
+                <div class="btn-container" style="display:flex; flex-direction:column; gap:10px; width:100%; max-width:640px;">
+                    <div class="btn-row" style="display:flex; align-items:center; gap:8px;">
+                        <label class="small">Inicio:</label>
+                        <input id="inputStart" type="text" readonly style="width:100px; text-align:center; padding:6px; background:rgba(255,255,255,0.05); border:1px solid #333; border-radius:4px; color:#fff;">
+                        <button id="startDec" title="Restar 1s">⬅️</button>
+                        <button id="startInc" title="Sumar 1s">➡️</button>
+                    </div>
+                    <div class="btn-row" style="display:flex; align-items:center; gap:8px;">
+                        <label class="small">Fin:</label>
+                        <input id="inputEnd" type="text" readonly style="width:100px; text-align:center; padding:6px; background:rgba(255,255,255,0.05); border:1px solid #333; border-radius:4px; color:#fff;">
+                        <button id="endDec" title="Restar 1s">⬅️</button>
+                        <button id="endInc" title="Sumar 1s">➡️</button>
+                    </div>
+                    <div class="btn-row segment-adjust-buttons" style="display:flex; gap:8px;">
+                        <button id="segmentDec" title="Mover segmento 1s atrás">⬅️ Segmento atrás</button>
+                        <button id="segmentInc" title="Mover segmento 1s adelante">Segmento adelante ➡️</button>
+                    </div>
+                </div>
+                <div class="mt-3 flex gap-2" style="justify-content:flex-end;">
+                    <button id="generateClipBtn" class="bg-green-600 px-4 py-2 rounded">Generar clip</button>
+                </div>
+                <div id="genResult" class="mt-3 small"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        let capturaActiva = false;
+        let pollInterval = null;
+
+        function showToast(msg, color = "#333") {
+            const toast = document.getElementById("toast");
+            toast.textContent = msg;
+            toast.style.background = color;
+            toast.className = "toast show";
+            setTimeout(() => { toast.className = "toast"; }, 2500);
+        }
+
+        async function cargarCamaras() {
+            const res = await fetch('/generar_clips_directo/listar_camaras');
+            const cams = await res.json();
+            const sel = document.getElementById('camSelect');
+            sel.innerHTML = "";
+            cams.forEach(cam => {
+                const radio = document.createElement('input');
+                radio.type = 'radio';
+                radio.name = 'camSelectRadio';
+                radio.value = cam.id;
+                radio.id = 'cam_' + cam.id;
+                const radioVal = document.createElement('label');
+                radioVal.htmlFor = 'cam_' + cam.id;
+                radioVal.innerHTML = "<img src='data:image/png;base64," + cam.frame_base64 + "'/> " + cam.name;
+                const radioContainer = document.createElement('div');
+                radioContainer.appendChild(radio);
+                radioContainer.appendChild(radioVal);
+                sel.appendChild(radioContainer);
+            });
+            
+        }
+
+        async function cargarSegmentos() {
+            const res = await fetch('/generar_clips_directo/segmentos_detectados');
+            const grupos = await res.json();
+            const cont = document.getElementById('segmentosContainer');
+            cont.innerHTML = '';
+            grupos.forEach(grupo => {
+                const fechaDiv = document.createElement('div');
+                fechaDiv.className = 'mb-2';
+                fechaDiv.innerHTML = `<div class="font-bold text-blue-300">${grupo.fecha}</div>`;
+                grupo.segmentos.forEach(seg => {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center py-2 px-1 rounded hover:bg-gray-700 cursor-pointer';
+                    row.innerHTML = `<div>
+                        <span class="text-green-400">${seg.clase}</span>
+                        <span class="text-xs text-gray-400 ml-2">Inicio: ${formatTime(seg.start)} • Fin: ${formatTime(seg.end)}</span>
+                    </div>
+                    <div>
+                        <span class="bg-gray-700 px-2 py-1 rounded text-xs">prob ${parseFloat(seg.accuracy).toFixed(3)}</span>
+                        <button class="ml-2 bg-red-600 hover:bg-red-700 text-xs px-2 py-1 rounded text-white" onclick="eliminarSegmento(${seg.id});event.stopPropagation();">🗑️</button>
+                    </div>`;
+                    row.onclick = () => openClipModal(seg, grupo.fecha);
+                    fechaDiv.appendChild(row);
+                });
+                cont.appendChild(fechaDiv);
+            });
+        }
+
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00:00.00";
+            const d = new Date(sec * 1000);
+            return d.toLocaleTimeString();
+        }
+
+        async function eliminarSegmento(id) {
+            await fetch('/generar_clips_directo/eliminar_segmento', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ id })
+            });
+            showToast("Segmento eliminado", "#c0392b");
+            cargarSegmentos();
+        }
+
+        async function openClipModal(seg, fecha) {
+            console.log(seg)
+            currentSegment = seg;
+            clipModal.style.display = 'flex';
+            genResult.innerHTML = '';
+            const grabacionesDir = document.getElementById('grabacionesDir').value;
+            document.getElementById('modalTitle').textContent = "Editar segmento: " + seg.clase;
+            modalVideo.src = `/generar_clips_directo/video_original?grabaciones_dir=${encodeURIComponent(grabacionesDir)}&fecha=${encodeURIComponent(fecha)}`;
+            setTimeout(() => {
+                restartMarkers();
+
+                var start = seg.start || 0;
+                var end = seg.end || 0;
+                if (start < 0) {
+                    start = 0;
+                }
+                if (end > videoDuration) {
+                    end = videoDuration;
+                }
+                inputStart.dataset.sec = start;
+                markerStartPct = (inputStart.dataset.sec / videoDuration) * 100;
+                inputEnd.dataset.sec = end;
+                markerEndPct = (inputEnd.dataset.sec / videoDuration) * 100;
+                updateMarkers();
+                modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
+            }, 200);
+        }
+
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+            clipModal.style.display = 'none';
+            modalVideo.pause();
+            modalVideo.src = "";
+        });
+
+        // async function visualizarSegmento(seg, fecha) {
+        //     const grabacionesDir = document.getElementById('grabacionesDir').value;
+        //     const url = `/generar_clips_directo/video_original?grabaciones_dir=${encodeURIComponent(grabacionesDir)}&fecha=${encodeURIComponent(fecha)}`;
+        //     try {
+        //         const res = await fetch(url);
+        //         if (!res.ok) {
+        //             showToast("El vídeo de grabación aún no está disponible", "#c0392b");
+        //             return;
+        //         }
+        //         // Mostrar modal de visualización similar a generar_clips_momentos_clave_index.html
+        //         const blob = await res.blob();
+        //         const videoUrl = URL.createObjectURL(blob);
+        //         const win = window.open("", "_blank");
+        //         win.document.write(`<video src="${videoUrl}" controls autoplay style="width:100%;max-width:900px"></video>`);
+        //     } catch (e){
+        //         console.error(e);   
+        //         showToast("El vídeo de grabación aún no está disponible", "#c0392b");
+        //     }
+        // }
+
+        document.getElementById('capturaBtn').onclick = async function() {
+            const btn = this;
+            const cam_id = document.querySelectorAll('input[type=radio]:checked')[0].value;
+            const grabacionesDir = document.getElementById('grabacionesDir').value;
+            if (!capturaActiva) {
+                btn.disabled = true;
+                btn.textContent = "Iniciando...";
+                const res = await fetch('/generar_clips_directo/iniciar_captura', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ cam_id, grabaciones_dir: grabacionesDir })
+                });
+                btn.disabled = false;
+                if ((await res.json()).success) {
+                    capturaActiva = true;
+                    btn.textContent = "Parar captura";
+                    pollInterval = setInterval(cargarSegmentos, 2000);
+                } else {
+                    btn.textContent = "Capturar momentos clave en directo";
+                    showToast("No se pudo iniciar la captura", "#c0392b");
+                }
+            } else {
+                btn.disabled = true;
+                btn.textContent = "Parando...";
+                await fetch('/generar_clips_directo/parar_captura', { method: 'POST' });
+                capturaActiva = false;
+                btn.textContent = "Capturar momentos clave en directo";
+                btn.disabled = false;
+                if (pollInterval) clearInterval(pollInterval);
+            }
+        };
+
+        cargarCamaras();
+        cargarSegmentos();
+    </script>
+
+    <script>
+        function formatTime(sec) {
+            if (isNaN(sec)) return "00:00:00.00";
+            const h = Math.floor(sec / 3600).toString().padStart(2, "0");
+            const m = Math.floor((sec % 3600) / 60).toString().padStart(2, "0");
+            const s = Math.floor(sec % 60).toString().padStart(2, "0");
+            const ms = Math.floor((sec % 1) * 100).toString().padStart(2, "0");
+            return `${h}:${m}:${s}.${ms}`;
+        }
+
+        // ---- Modal edición/generación de clip ----
+        let currentSegment = null;
+        let videoDuration = 0;
+        let markerStartPct = 0;
+        let markerEndPct = 100;
+        let scrubbing = false;
+        let draggingMarker = null;
+        let draggingRange = false;
+        let dragOffset = 0;
+        let wasPlayingBeforeDrag = false;
+        let shiftPressed = false;
+        let controlPressed = false;
+
+        const clipModal = document.getElementById('clipModal');
+        const modalVideo = document.getElementById('modalVideo');
+        const inputStart = document.getElementById('inputStart');
+        const inputEnd = document.getElementById('inputEnd');
+        const generateClipBtn = document.getElementById('generateClipBtn');
+        const genResult = document.getElementById('genResult');
+        const timelineTop = document.getElementById('timelineTop');
+        const timelineBottom = document.getElementById('timelineBottom');
+        const scrubHandle = document.getElementById('scrubHandle');
+        const progressFillTop = document.getElementById('progressFillTop');
+        const markerStart = document.getElementById('markerStart');
+        const markerEnd = document.getElementById('markerEnd');
+        const selectionRange = document.getElementById('selectionRange');
+        const startDecBtn = document.getElementById('startDec');
+        const startIncBtn = document.getElementById('startInc');
+        const endDecBtn = document.getElementById('endDec');
+        const endIncBtn = document.getElementById('endInc');
+        const segmentDecBtn = document.getElementById('segmentDec');
+        const segmentIncBtn = document.getElementById('segmentInc');
+
+        generateClipBtn.addEventListener('click', async () => {
+            if (!currentSegment) return;
+            const start = parseFloat(inputStart.dataset.sec);
+            const end = parseFloat(inputEnd.dataset.sec);
+            if (isNaN(start) || isNaN(end) || end <= start) return alert("Start/end inválidos");
+            generateClipBtn.disabled = true;
+            genResult.innerHTML = "Generando...";
+            const res = await fetch('/generar_clips_directo/generar_clip', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    video_name: currentSegment.video_name,
+                    start: start,
+                    end: end,
+                    clase: currentSegment.clase
+                })
+            });
+            const data = await res.json();
+            generateClipBtn.disabled = false;
+            if (data.success) {
+                genResult.innerHTML = `Generado: <a href="${data.url}" target="_blank">${data.generated}</a>`;
+                showToast("Clip generado correctamente", "#025902");
+            } else {
+                genResult.innerText = "Error: " + (data.error || "unknown");
+                showToast("Error generando clip", "#c0392b");
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === "Shift" && !shiftPressed) { shiftPressed = true; }
+            if (e.key === "Control" && !controlPressed) { controlPressed = true; }
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key === "Shift") { shiftPressed = false; }
+            if (e.key === "Control") { controlPressed = false; }
+        });
+
+        modalVideo.onloadedmetadata = () => {
+            videoDuration = modalVideo.duration;
+            updateMarkers();
+        };
+
+        modalVideo.ontimeupdate = () => {
+            if (!videoDuration) return;
+            const current = modalVideo.currentTime;
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((current - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+            scrubHandle.style.left = normPct + "%";
+            if (current >= endTime) {
+                modalVideo.currentTime = startTime;
+                modalVideo.play();
+            }
+        };
+
+        function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+
+        function updateMarkers() {
+            markerStart.style.left = markerStartPct + "%";
+            markerEnd.style.left = markerEndPct + "%";
+            selectionRange.style.left = markerStartPct + "%";
+            selectionRange.style.width = (markerEndPct - markerStartPct) + "%";
+            const sSec = (markerStartPct / 100) * videoDuration;
+            const eSec = (markerEndPct / 100) * videoDuration;
+            inputStart.value = formatTime(sSec);
+            inputEnd.value = formatTime(eSec);
+            inputStart.dataset.sec = sSec;
+            inputEnd.dataset.sec = eSec;
+        }
+
+        function restartMarkers() {
+            markerStartPct = 0;
+            markerEndPct = 100;
+            modalVideo.currentTime = 0;
+            updateMarkers();
+        }
+
+        startDecBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s - timeToChange, 0, parseFloat(inputEnd.dataset.sec) - 0.1);
+            inputStart.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+        startIncBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s + timeToChange, 0, parseFloat(inputEnd.dataset.sec) - 0.1);
+            inputStart.dataset.sec = s;
+            markerStartPct = (s / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        endDecBtn.onclick = () => {
+            let e = parseFloat(inputEnd.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e - timeToChange, parseFloat(inputStart.dataset.sec) + 0.1, videoDuration);
+            inputEnd.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(inputStart.dataset.sec);
+            modalVideo.currentTime = Math.max(e - 3, s);
+            modalVideo.play();
+        };
+        endIncBtn.onclick = () => {
+            let e = parseFloat(inputEnd.dataset.sec);
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e + timeToChange, parseFloat(inputStart.dataset.sec) + 0.1, videoDuration);
+            inputEnd.dataset.sec = e;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            const s = parseFloat(inputStart.dataset.sec);
+            modalVideo.currentTime = Math.max(e - 3, s);
+            modalVideo.play();
+        };
+
+        segmentDecBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            let e = parseFloat(inputEnd.dataset.sec);
+            const duration = e - s;
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            s = clamp(s - timeToChange, 0, videoDuration - duration);
+            e = s + duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        segmentIncBtn.onclick = () => {
+            let s = parseFloat(inputStart.dataset.sec);
+            let e = parseFloat(inputEnd.dataset.sec);
+            const duration = e - s;
+            const timeToChange = shiftPressed && controlPressed ? 0.01 : shiftPressed ? 0.1 : 1;
+            e = clamp(e + timeToChange, duration, videoDuration);
+            s = e - duration;
+            markerStartPct = (s / videoDuration) * 100;
+            markerEndPct = (e / videoDuration) * 100;
+            updateMarkers();
+            modalVideo.currentTime = s;
+            modalVideo.play();
+        };
+
+        timelineTop.addEventListener("pointerdown", ev => {
+            scrubbing = true;
+            wasPlayingBeforeDrag = !modalVideo.paused;
+            if (wasPlayingBeforeDrag) modalVideo.pause();
+            timelineTop.setPointerCapture(ev.pointerId);
+            handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointermove", ev => {
+            if (scrubbing) handleScrub(ev);
+        });
+        timelineTop.addEventListener("pointerup", ev => {
+            if (scrubbing) {
+                scrubbing = false;
+                timelineTop.releasePointerCapture(ev.pointerId);
+                modalVideo.play();
+            }
+        });
+
+        function handleScrub(ev) {
+            const rect = timelineTop.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const clamped = clamp(pct, markerStartPct, markerEndPct);
+            const newTime = (clamped / 100) * videoDuration;
+            modalVideo.currentTime = newTime;
+            const startTime = (markerStartPct / 100) * videoDuration;
+            const endTime = (markerEndPct / 100) * videoDuration;
+            const normPct = ((newTime - startTime) / (endTime - startTime)) * (markerEndPct - markerStartPct) + markerStartPct;
+            scrubHandle.style.left = normPct + "%";
+            progressFillTop.style.left = markerStartPct + "%";
+            progressFillTop.style.width = (normPct - markerStartPct) + "%";
+        }
+
+        // Markers dragging
+        markerStart.addEventListener("pointerdown", ev => {
+            draggingMarker = "start";
+            document.body.classList.add("noselect");
+            markerStart.setPointerCapture(ev.pointerId);
+        });
+        markerEnd.addEventListener("pointerdown", ev => {
+            draggingMarker = "end";
+            document.body.classList.add("noselect");
+            markerEnd.setPointerCapture(ev.pointerId);
+        });
+        markerStart.addEventListener("pointermove", ev => handleMarkerDrag(ev, "start"));
+        markerEnd.addEventListener("pointermove", ev => handleMarkerDrag(ev, "end"));
+        markerStart.addEventListener("pointerup", ev => handleMarkerRelease(ev, "start"));
+        markerEnd.addEventListener("pointerup", ev => handleMarkerRelease(ev, "end"));
+
+        function handleMarkerDrag(ev, which) {
+            if (draggingMarker !== which) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            const pct = (x / rect.width) * 100;
+            const gap = 0.1;
+            if (which === "start") {
+                markerStartPct = clamp(pct, 0, markerEndPct - gap);
+            } else {
+                markerEndPct = clamp(pct, markerStartPct + gap, 100);
+            }
+            updateMarkers();
+        }
+
+        function handleMarkerRelease(ev, which) {
+            if (draggingMarker !== which) return;
+            ev.target.releasePointerCapture(ev.pointerId);
+            document.body.classList.remove("noselect");
+            if (which === "start") {
+                modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
+                modalVideo.play();
+            } else {
+                const s = parseFloat(inputStart.dataset.sec);
+                const e = parseFloat(inputEnd.dataset.sec);
+                modalVideo.currentTime = Math.max(e - 3, s);
+                modalVideo.play();
+            }
+            draggingMarker = null;
+        }
+
+        // Selection range dragging
+        selectionRange.addEventListener("pointerdown", ev => {
+            draggingRange = true;
+            document.body.classList.add("noselect");
+            selectionRange.setPointerCapture(ev.pointerId);
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left, 0, rect.width);
+            dragOffset = x - (markerStartPct / 100) * rect.width;
+        });
+        selectionRange.addEventListener("pointermove", ev => {
+            if (!draggingRange) return;
+            const rect = timelineBottom.getBoundingClientRect();
+            const x = clamp(ev.clientX - rect.left - dragOffset, 0, rect.width);
+            const rangeWidth = ((markerEndPct - markerStartPct) / 100) * rect.width;
+            let newStart = (x / rect.width) * 100;
+            let newEnd = ((x + rangeWidth) / rect.width) * 100;
+            const shift = newEnd > 100 ? newEnd - 100 : newStart < 0 ? newStart : 0;
+            markerStartPct = clamp(newStart - shift, 0, 100);
+            markerEndPct = clamp(newEnd - shift, 0, 100);
+            updateMarkers();
+        });
+        selectionRange.addEventListener("pointerup", ev => {
+            if (!draggingRange) return;
+            selectionRange.releasePointerCapture(ev.pointerId);
+            draggingRange = false;
+            document.body.classList.remove("noselect");
+            modalVideo.currentTime = parseFloat(inputStart.dataset.sec);
+            modalVideo.play();
+        });
+    </script>
+</body>
+</html>

@@ -8,7 +8,8 @@ if __name__ == "__main__":
     from generar_clases.generar_clases import app as generarClasesApp
     from generar_modelo.generar_modelo_svm import app as generarModeloSVMApp
     from generar_clips_prompt.generar_clips import app as generarClipsApp
-    from generar_clips_momentos_clave.generar_clips_momentos_clave import app as generarClipsMomentosClaveApp  # NUEVO
+    from generar_clips_momentos_clave.generar_clips_momentos_clave import app as generarClipsMomentosClaveApp
+    from generar_clips_directo.generar_clips_directo import app as generarClipsDirectoApp
     print("Apps cargadas")
 
 CURRENT_PATH = os.path.dirname(__file__).replace("\\", "/") + "/"
@@ -54,7 +55,8 @@ def create_app():
     app.register_blueprint(generarClasesApp, url_prefix="/generar_clases")
     app.register_blueprint(generarModeloSVMApp, url_prefix="/generar_modelo")
     app.register_blueprint(generarClipsApp, url_prefix="/generar_clips")
-    app.register_blueprint(generarClipsMomentosClaveApp, url_prefix="/generar_clips_momentos_clave")  # NUEVO
+    app.register_blueprint(generarClipsMomentosClaveApp, url_prefix="/generar_clips_momentos_clave")
+    app.register_blueprint(generarClipsDirectoApp, url_prefix="/generar_clips_directo")
 
     @app.route("/")
     def index():
